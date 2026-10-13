@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Omunim RFID — Jewellery Stock Management & Security System</title>
+<meta name="description" content="RFID-based jewellery stock tally and showroom security for Omunim Jewellery Software: bulk scanning, missing-item detection and security gate integration.">
+<style>
+  :root {
+    --bg:#05060e; --card:rgba(255,255,255,.04); --card-border:rgba(255,255,255,.09);
+    --orange:#ff9a3c; --orange-soft:#ffb347; --blue:#4d7cff; --blue-soft:#7aa2ff;
+    --green:#3ddc84; --red:#ff5d5d; --amber:#ffc44d;
+    --text:#f4f6ff; --muted:rgba(244,246,255,.62); --faint:rgba(244,246,255,.38);
+    --radius:18px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;line-height:1.6;overflow-x:hidden}
+  ::selection{background:rgba(255,154,60,.35)}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+  section{padding:88px 0;position:relative;z-index:1}
+  .stars{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .star{position:absolute;background:#fff;border-radius:50%;animation:twinkle 3.5s ease-in-out infinite}
+  @keyframes twinkle{0%,100%{opacity:.18}50%{opacity:.85}}
+
+  nav{position:fixed;top:0;left:0;right:0;z-index:50;transition:background .3s,border-color .3s;border-bottom:1px solid transparent}
+  nav.scrolled{background:rgba(5,6,14,.85);backdrop-filter:blur(14px);border-bottom-color:var(--card-border)}
+  .nav-inner{max-width:1160px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:26px}
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-weight:800;font-size:17px}
+  .brand img{width:38px;height:38px;border-radius:10px;object-fit:cover;box-shadow:0 0 18px rgba(255,154,60,.45)}
+  .brand b{color:var(--orange-soft)}
+  .brand .rfid-tag{font-size:10px;font-weight:800;letter-spacing:.14em;background:rgba(77,124,255,.15);border:1px solid rgba(77,124,255,.45);color:var(--blue-soft);border-radius:6px;padding:3px 8px;margin-left:2px}
+  .nav-links{display:flex;gap:22px;margin-left:auto}
+  .nav-links a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;transition:color .2s}
+  .nav-links a:hover{color:var(--text)}
+  .btn{display:inline-block;text-decoration:none;font-weight:700;font-size:15px;padding:13px 28px;border-radius:12px;transition:transform .15s,box-shadow .2s,background .2s;border:none;cursor:pointer;font-family:inherit}
+  .btn-primary{background:linear-gradient(135deg,#ff9a3c,#ff7a1a);color:#1a0e02;box-shadow:0 6px 26px rgba(255,122,26,.35)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(255,122,26,.5)}
+  .btn-ghost{background:var(--card);color:var(--text);border:1px solid var(--card-border)}
+  .btn-ghost:hover{background:rgba(255,255,255,.08);transform:translateY(-2px)}
+  .btn-sm{padding:10px 20px;font-size:14px}
+  .btn-blue{background:linear-gradient(135deg,#4d7cff,#2f5be0);color:#fff;box-shadow:0 6px 26px rgba(77,124,255,.35)}
+  .btn-blue:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(77,124,255,.5)}
+  .hamburger{display:none;margin-left:auto;background:none;border:1px solid var(--card-border);border-radius:10px;padding:9px 12px;cursor:pointer}
+  .hamburger span{display:block;width:20px;height:2px;background:var(--text);margin:4px 0;border-radius:2px}
+
+  .hero{min-height:100vh;display:flex;align-items:center;padding:150px 0 70px;position:relative;z-index:1}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;width:100%}  h1{font-size:clamp(36px,5.4vw,60px);font-weight:800;line-height:1.1;letter-spacing:-.02em;margin-bottom:20px}
+  h1 .accent{background:linear-gradient(120deg,var(--orange-soft),#ff7a1a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h1 .accent-blue{background:linear-gradient(120deg,var(--blue-soft),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.lead{color:var(--muted);font-size:clamp(16px,2.2vw,19px);max-width:540px;margin-bottom:34px}
+  .hero-ctas{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+  .micro{color:var(--faint);font-size:13.5px}
+  .micro b{color:var(--muted);font-weight:600}
+  .logo-stage{position:relative;width:min(100%,380px);aspect-ratio:1/1;margin:0 auto;user-select:none;-webkit-user-select:none;filter:drop-shadow(0 0 60px rgba(255,154,60,.18))}
+  .logo-stage img.base{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;border-radius:24px}
+  .eye-layer{position:absolute;pointer-events:none;will-change:transform}
+  .eye-layer img{display:block;width:100%;height:100%}
+  .hero-hint{text-align:center;color:var(--faint);font-size:13px;margin-top:14px}
+  .hero-center{text-align:center;max-width:900px;margin:0 auto;width:100%}
+  .logo-stage.logo-top{width:min(290px,60vw);margin:0 auto 4px}
+  .hero-center .hero-hint{margin:2px 0 16px}
+  .hero-center h1{font-size:clamp(26px,3.8vw,42px);margin-bottom:12px}
+  .complete-line{font-size:clamp(30px,5vw,58px);font-weight:800;letter-spacing:-.02em;margin:0 0 18px}
+  .hero-center .lead{margin-left:auto;margin-right:auto;max-width:740px}
+  .hero-center .hero-ctas{justify-content:center}
+
+  /* ---------- typewriter headline ---------- */
+  .typed-wrap{display:inline-block;min-height:1.15em;vertical-align:bottom}
+  .typed-grad{
+    background:linear-gradient(92deg,#ff9a3c 0%,#ff7a1a 38%,#8aa6ff 72%,#4d7cff 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .caret{
+    display:inline-block;width:5px;height:.95em;background:#ff9a3c;border-radius:2px;
+    margin-left:8px;vertical-align:-.12em;animation:blink 1.05s steps(1) infinite;
+    box-shadow:0 0 12px rgba(255,154,60,.8);
+  }
+  @keyframes blink{0%,55%{opacity:1}56%,100%{opacity:0}}
+
+  .sec-head{text-align:center;max-width:680px;margin:0 auto 52px}
+  .sec-head h2{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-.02em;margin-bottom:14px}
+  .sec-head p{color:var(--muted);font-size:17px}
+  .grad-orange{background:linear-gradient(120deg,var(--orange-soft),#ff7a1a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .grad-blue{background:linear-gradient(120deg,var(--blue-soft),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  .card{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:30px 28px;transition:transform .2s,border-color .2s,background .2s}
+  .card:hover{transform:translateY(-5px);border-color:rgba(255,154,60,.4)}
+  .card .icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:18px;background:rgba(255,154,60,.1);border:1px solid rgba(255,154,60,.25)}
+  .card:nth-child(even) .icon{background:rgba(77,124,255,.1);border-color:rgba(77,124,255,.3)}
+  .card h3{font-size:18px;font-weight:700;margin-bottom:8px}
+  .card p{color:var(--muted);font-size:15px}
+  .card ul{list-style:none;margin-top:12px;display:grid;gap:8px}
+  .card ul li{color:var(--muted);font-size:14.5px;padding-left:22px;position:relative}
+  .card ul li::before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:800}
+
+  table.cmp{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);overflow:hidden;font-size:15px}
+  table.cmp th,table.cmp td{padding:15px 18px;text-align:left;border-bottom:1px solid var(--card-border)}
+  table.cmp tr:last-child th,table.cmp tr:last-child td{border-bottom:none}
+  table.cmp th{background:rgba(255,255,255,.03);font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+  table.cmp td:first-child{color:var(--muted);font-weight:600}
+  table.cmp .win{color:var(--green);font-weight:700}
+  .tbl-wrap{overflow-x:auto;border-radius:var(--radius)}
+
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;justify-content:center;margin-top:8px}
+  .flow-step{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:18px 20px;text-align:center;min-width:150px;flex:1;max-width:210px}
+  .flow-step b{display:block;font-size:15px;margin-bottom:4px}
+  .flow-step span{font-size:13px;color:var(--muted)}
+  .flow-arrow{align-self:center;font-size:22px;color:var(--orange-soft);padding:0 10px;font-weight:800}
+  .flow-step.hl{border-color:rgba(77,124,255,.5);background:rgba(77,124,255,.07)}
+
+  .band{background:linear-gradient(135deg,rgba(255,154,60,.09),rgba(77,124,255,.07));border:1px solid rgba(255,154,60,.25);border-radius:26px;padding:52px 46px;position:relative;overflow:hidden}
+  .band::before{content:"";position:absolute;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(255,154,60,.14),transparent 70%);top:-140px;right:-100px;pointer-events:none}
+  .band h2{font-size:clamp(24px,3.4vw,34px);font-weight:800;margin-bottom:12px;letter-spacing:-.02em}
+  .band p.lead{color:var(--muted);margin-bottom:20px;max-width:640px}
+  .pill{display:inline-block;font-size:12.5px;font-weight:700;border-radius:999px;padding:6px 14px;margin:4px 6px 4px 0}
+  .pill.o{background:rgba(255,154,60,.12);border:1px solid rgba(255,154,60,.4);color:var(--orange-soft)}
+  .pill.b{background:rgba(77,124,255,.12);border:1px solid rgba(77,124,255,.4);color:var(--blue-soft)}
+  .pill.g{background:rgba(61,220,132,.1);border:1px solid rgba(61,220,132,.35);color:var(--green)}
+
+  /* ---------- hardware photos ---------- */
+  .hw-photo{width:100%;height:250px;object-fit:contain;border-radius:12px;margin-bottom:16px;background:#0a0d1a;border:1px solid var(--card-border);display:block}
+  .hw-photo.tall{height:250px;object-fit:contain;background:#0d1122;padding:10px}
+  .vs-photos{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:26px}
+  .vs-photos figure{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);overflow:hidden}
+  .vs-photos img{width:100%;height:220px;object-fit:contain;background:#0a0d1a;display:block}
+  .vs-photos figcaption{padding:14px 18px;font-size:14.5px;color:var(--muted)}
+  .vs-photos figcaption b{color:var(--text)}
+  .sim-card .thumb{width:100%;height:130px;object-fit:contain;border-radius:10px;margin-bottom:12px;background:#0a0d1a;border:1px solid var(--card-border);display:block}
+  @media (max-width:640px){ .vs-photos{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+
+<nav id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top"><img src="assets/base.jpg" alt="Omunim logo">Omunim <b>RFID</b><span class="rfid-tag">RFID</span></a>
+    <div class="nav-links" id="navLinks">
+      <a href="#overview">Overview</a>
+      <a href="#compare">RFID vs Barcode</a>
+      <a href="#tags">Tags</a>
+      <a href="#hardware">Hardware</a>
+      <a href="#security">Security</a>
+      <a href="#solution">Solution</a>
+      <a href="#simulator">Simulator</a>
+    </div>
+    <a href="#simulator" class="btn btn-primary btn-sm" style="margin-left:8px" id="navCta">Try simulator</a>
+    <button class="hamburger" id="hamburger" aria-label="Open menu"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+
+<!-- ================= HERO ================= -->
+<header class="hero" id="top">
+  <div class="wrap hero-center">
+    <h1>Omunim watches your stock,<br><span class="grad-orange">so you don't have to.</span></h1>
+    <div class="logo-stage logo-top" id="logoStage" aria-label="Omunim logo — the eyes follow your cursor">
+      <img class="base" src="assets/base.jpg" alt="Omunim robot logo" draggable="false">
+      <div class="eye-layer" id="eyeBlue"><img src="assets/eye-blue.png" alt="" draggable="false"></div>
+      <div class="eye-layer" id="eyeGreen"><img src="assets/eye-green.png" alt="" draggable="false"></div>
+    </div>
+    <p class="complete-line">Complete RFID <span class="typed-wrap"><span id="typed" class="typed-grad"></span><span class="caret" aria-hidden="true"></span></span></p>
+    <p class="lead">Omunim RFID reads <b style="color:var(--text)">multiple jewellery items together</b> — no one-by-one scanning. Verify your entire showroom against software stock, catch missing pieces instantly, and guard your exit with an RFID security gate.</p>
+    <div class="hero-ctas">
+      <a href="#simulator" class="btn btn-primary">Try the live simulator</a>
+      <a href="#hardware" class="btn btn-ghost">Explore hardware</a>
+    </div>
+    <p class="micro"><b>Bulk reading</b> · Missing-item detection · <b>Security gate integration</b></p>
+  </div>
+</header>
+
+<!-- ================= OVERVIEW ================= -->
+<section id="overview" style="padding-top:30px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>What RFID does for a <span class="grad-orange">jewellery business</span></h2>
+      <p>Radio-frequency identification lets you identify many tagged jewellery items at once — from a short distance, without line-of-sight scanning.</p>
+    </div>
+    <div class="grid3">
+      <div class="card reveal"><div class="icon">⚡</div><h3>Fast stock counting</h3><p>Read trays of jewellery together instead of scanning piece by piece.</p></div>
+      <div class="card reveal"><div class="icon">📦</div><h3>Bulk item identification</h3><p>Multiple RFID tags respond simultaneously to a single scan.</p></div>
+      <div class="card reveal"><div class="icon">📱</div><h3>Mobile stock tally</h3><p>Walk the showroom with the mobile app and tally on the go.</p></div>
+      <div class="card reveal"><div class="icon">🔍</div><h3>Missing-item detection</h3><p>The system pinpoints exactly which mapped items were not found.</p></div>
+      <div class="card reveal"><div class="icon">🚪</div><h3>Security gate integration</h3><p>Detect tagged items moving through the exit without authorisation.</p></div>
+      <div class="card reveal"><div class="icon">🎯</div><h3>Accurate stock management</h3><p>Compare physical stock with software stock and kill counting errors.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= RFID VS BARCODE ================= -->
+<section id="compare" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>Barcode scans <span class="grad-blue">one by one</span>.<br>RFID reads <span class="grad-orange">them all together</span>.</h2>
+    </div>
+    <div class="vs-photos reveal">
+      <figure><img src="assets/hardware/barcode-tag.jpg" alt="Jewellery barcode price tags" loading="lazy"><figcaption><b>Barcode tag</b> — optical, scanned one at a time, line of sight needed.</figcaption></figure>
+      <figure><img src="assets/hardware/tag-onetime.jpg" alt="RFID tag" loading="lazy"><figcaption><b>RFID tag</b> — radio frequency, many tags read together, no line of sight.</figcaption></figure>
+    </div>
+    <div class="tbl-wrap reveal">
+      <table class="cmp">
+        <tr><th>Feature</th><th>Barcode tag</th><th>RFID tag</th></tr>
+        <tr><td>Technology</td><td>Optical scanning</td><td class="win">Radio frequency</td></tr>
+        <tr><td>Reading</td><td>One-by-one, line of sight</td><td class="win">Multiple tags simultaneously</td></tr>
+        <tr><td>Speed</td><td>Slower</td><td class="win">Faster</td></tr>
+        <tr><td>Manual scanning</td><td>Required</td><td class="win">Not always required</td></tr>
+        <tr><td>Stock tally</td><td>Item-by-item</td><td class="win">Bulk scanning</td></tr>
+        <tr><td>Missing-item detection</td><td>Difficult</td><td class="win">Easy</td></tr>
+        <tr><td>Security gate</td><td>Limited</td><td class="win">Possible</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TWO USES ================= -->
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>One technology, <span class="grad-orange">two superpowers</span></h2>
+    </div>
+    <div class="grid2">
+      <div class="card reveal" style="border-color:rgba(255,154,60,.35)">
+        <div class="icon">📋</div>
+        <h3>A. RFID Stock Tally</h3>
+        <p>Automated, dramatically faster jewellery stock counting. Verify physical stock against software stock, identify missing and extra items automatically.</p>
+        <ul><li>Faster physical verification</li><li>Bulk reading, less manual work</li><li>Physical vs software comparison</li></ul>
+        <div style="margin-top:18px"><a href="#tally" class="btn btn-ghost btn-sm">How tally works</a></div>
+      </div>
+      <div class="card reveal" style="border-color:rgba(77,124,255,.35)">
+        <div class="icon">🛡️</div>
+        <h3>B. RFID Security Gate</h3>
+        <p>Detect tagged jewellery moving through the showroom exit without proper billing or authorisation — an always-on layer of security.</p>
+        <ul><li>Automatic tag detection at exit</li><li>Item identification via RFID</li><li>Optional AM anti-theft combo</li></ul>
+        <div style="margin-top:18px"><a href="#security" class="btn btn-ghost btn-sm">How the gate works</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= STOCK TALLY ================= -->
+<section id="tally" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>From tag to <span class="grad-orange">tally result</span></h2>
+      <p>RFID tags are mapped to jewellery items once. After that, every tally is a scan-and-compare.</p>
+    </div>
+    <div class="flow reveal" style="margin-bottom:44px">
+      <div class="flow-step"><b>1. Tag</b><span>Jewellery item gets an RFID tag</span></div><div class="flow-arrow">→</div>
+      <div class="flow-step"><b>2. Map</b><span>Tag linked to item in software</span></div><div class="flow-arrow">→</div>
+      <div class="flow-step hl"><b>3. Scan</b><span>RFID reads multiple tags</span></div><div class="flow-arrow">→</div>
+      <div class="flow-step hl"><b>4. Compare</b><span>Physical vs software stock</span></div><div class="flow-arrow">→</div>
+      <div class="flow-step"><b>5. Result</b><span>Found · Missing · Extra</span></div>
+    </div>
+    <div class="band reveal">
+      <h2>📱 Mobile RFID stock tally</h2>
+      <p class="lead">Log in to the mobile app, select Stock Tally, start the RFID scan and walk your showroom. The system reads the tags, compares with software stock and shows the tally result.</p>
+      <div>
+        <span class="pill o">Total items: 500</span><span class="pill g">Found: 497</span><span class="pill" style="background:rgba(255,93,93,.1);border:1px solid rgba(255,93,93,.4);color:var(--red)">Missing: 3</span><span class="pill b">Extra: 0</span>
+      </div>
+      <p class="micro" style="margin-top:16px">Example result — the system lists the exact missing item codes from their RFID mapping.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TAG TYPES ================= -->
+<section id="tags" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>Three tag types, <span class="grad-orange">one right choice</span></h2>
+      <p>Pick the tag that fits how your showroom works.</p>
+    </div>
+    <div class="grid3">
+      <div class="card reveal">
+        <img class="hw-photo" src="assets/hardware/tag-onetime.jpg" alt="One-time-use RFID tag with tail" loading="lazy">
+        <div class="icon">🏷️</div>
+        <h3>One-Time-Use RFID Tag</h3>
+        <p>Designed for permanent tagging — the tail ties directly to the jewellery piece. The RFID printer maps the tag <b>automatically during printing</b> — fastest tagging with the least manual work.</p>
+        <ul><li>Tail for jewellery attachment</li><li>Automatic mapping via printer</li><li>Streamlined high-volume tagging</li></ul>
+      </div>
+      <div class="card reveal">
+        <img class="hw-photo" src="assets/hardware/tag-reusable.jpg" alt="Reusable RFID tag" loading="lazy">
+        <div class="icon">🔄</div>
+        <h3>Reusable RFID Tag</h3>
+        <p>Hard hang-tag with hole that can be reused across items. Mapping is done manually — no printer needed — using a desktop reader or handheld scanner.</p>
+        <ul><li>No RFID printer required</li><li>Manual mapping, flexible process</li><li>Ideal if you already own tags</li></ul>
+      </div>
+      <div class="card reveal">
+        <img class="hw-photo" src="assets/hardware/tag-am-rfid.jpg" alt="AM + RFID tag" loading="lazy">
+        <div class="icon">🛡️</div>
+        <h3>AM + RFID Tag</h3>
+        <p>Combines RFID identification with AM anti-theft technology — for showrooms that want stock management <b>and</b> security in one tag.</p>
+        <ul><li>RFID + anti-theft in one</li><li>Pairs with AM + RFID gate</li><li>Maximum protection</li></ul>
+      </div>
+    </div>
+
+    <div class="sec-head" style="margin-top:64px">
+      <h2 style="font-size:clamp(24px,3.4vw,32px)">How tags get <span class="grad-blue">mapped</span></h2>
+      <p>Mapping links the RFID number to the jewellery item in software. Choose automatic or manual.</p>
+    </div>
+    <div class="tbl-wrap reveal">
+      <table class="cmp">
+        <tr><th>Feature</th><th>RFID Printer</th><th>Desktop Reader</th><th>RFID Scanner</th></tr>
+        <tr><td>Tag type</td><td>One-time</td><td>Reusable</td><td>Reusable</td></tr>
+        <tr><td>Mapping</td><td class="win">Automatic</td><td>Manual</td><td>Manual</td></tr>
+        <tr><td>Printer required</td><td>Yes</td><td class="win">No</td><td class="win">No</td></tr>
+        <tr><td>Mobility</td><td>Low</td><td>Fixed</td><td class="win">High</td></tr>
+        <tr><td>Speed</td><td class="win">Very fast</td><td>Moderate</td><td>Fast</td></tr>
+        <tr><td>Best for</td><td>High-volume tagging</td><td>Fixed counter mapping</td><td>Flexible / mobile mapping</td></tr>
+      </table>
+    </div>
+    <p class="micro reveal" style="text-align:center;margin-top:16px"><b style="color:var(--muted)">Recommendation:</b> One-time tag → RFID printer · Reusable tag → desktop reader or scanner</p>
+  </div>
+</section>
+
+<!-- ================= HARDWARE ================= -->
+<section id="hardware" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>The complete <span class="grad-orange">RFID ecosystem</span></h2>
+      <p>Every component works with Omunim Jewellery Software out of the box.</p>
+    </div>
+    <div class="grid3">
+      <div class="card reveal"><img class="hw-photo" src="assets/hardware/tag-onetime.jpg" alt="RFID tag" loading="lazy"><div class="icon">🏷️</div><h3>RFID Tags</h3><p>One-time-use, reusable and AM + RFID tags for every showroom need.</p><p class="micro" style="margin-top:10px">Tag type guide above ↑</p></div>
+      <div class="card reveal"><img class="hw-photo tall" src="assets/hardware/tsc-t820.jpg" alt="TSC T820 RFID printer" loading="lazy"><div class="icon">🖨️</div><h3>TSC T820 RFID Printer</h3><p>Prints one-time-use tags with <b>automatic RFID mapping</b> during printing. The fastest way to tag high volumes.</p><p class="micro" style="margin-top:10px"><a href="https://youtu.be/719YCh2Yc7w" target="_blank" rel="noopener" style="color:var(--blue-soft)">Watch printer demo →</a></p></div>
+      <div class="card reveal"><div class="icon">🖥️</div><h3>RFID Desktop Reader</h3><p>Fixed-location manual mapping of reusable tags: place the tag near the reader, it detects the RFID number, you save the mapping.</p><p class="micro" style="margin-top:10px">Price: contact us (+ GST) · <a href="https://youtube.com/shorts/x_0Lje_HtKk" target="_blank" rel="noopener" style="color:var(--blue-soft)">Watch demo →</a></p></div>
+      <div class="card reveal"><img class="hw-photo tall" src="assets/hardware/seuic-touch2.jpg" alt="Seuic AUTO Touch 2 RFID scanner" loading="lazy"><div class="icon">📡</div><h3>Seuic AUTO Touch 2</h3><p>Portable UHF RFID handheld for manual mapping and mobile stock tally — cover showroom and stockroom with one device.</p><p class="micro" style="margin-top:10px">Photo, specs &amp; price: contact us</p></div>
+      <div class="card reveal"><img class="hw-photo tall" src="assets/hardware/rfid-gate.jpg" alt="RFID security gate" loading="lazy"><div class="icon">🚪</div><h3>RFID Security Gate</h3><p>Showroom exit gate that detects RFID-tagged jewellery moving through without authorisation and raises an alert.</p><p class="micro" style="margin-top:10px">Best for RFID-focused security</p></div>
+      <div class="card reveal"><div class="icon">🛡️</div><h3>AM + RFID Security Gate</h3><p>Combines AM anti-theft with RFID item identification — the enhanced-security option for high-value showrooms.</p><p class="micro" style="margin-top:10px">Best for enhanced security</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SECURITY ================= -->
+<section id="security" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>A gate that <span class="grad-blue">knows every piece</span></h2>
+      <p>Tagged jewellery → moves toward exit → gate detects the tag → system identifies the item → alert or verification.</p>
+    </div>
+    <div class="grid2" style="margin-bottom:28px">
+      <div class="card reveal"><img class="hw-photo tall" src="assets/hardware/rfid-gate.jpg" alt="RFID security gate pedestals" loading="lazy"><div class="icon">🚪</div><h3>RFID Security Gate</h3><p>RFID detection with full item identification at the exit. Ideal when your priority is RFID-based monitoring.</p><ul><li>Improved showroom security</li><li>Detects unauthorised movement</li><li>Automatic RFID detection</li></ul></div>
+      <div class="card reveal"><div class="icon">🛡️</div><h3>AM + RFID Security Gate</h3><p>Everything the RFID gate does, plus AM anti-theft technology — two security layers watching the same exit.</p><ul><li>RFID item identification</li><li>AM anti-theft layer</li><li>Recommended for enhanced security</li></ul></div>
+    </div>
+    <div class="tbl-wrap reveal">
+      <table class="cmp">
+        <tr><th>Feature</th><th>RFID Gate</th><th>AM + RFID Gate</th></tr>
+        <tr><td>RFID detection</td><td class="win">Yes</td><td class="win">Yes</td></tr>
+        <tr><td>RFID item identification</td><td class="win">Yes</td><td class="win">Yes</td></tr>
+        <tr><td>AM anti-theft</td><td>No</td><td class="win">Yes</td></tr>
+        <tr><td>Security layer</td><td>RFID</td><td class="win">AM + RFID</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ECOSYSTEM ================= -->
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="band reveal">
+      <h2>The Omunim RFID ecosystem</h2>
+      <p class="lead">One connected flow — from the day a tag is printed to the moment a gate stops a theft.</p>
+      <div class="flow" style="margin-top:8px">
+        <div class="flow-step"><b>Tagging</b><span>One-time / reusable tags</span></div><div class="flow-arrow">→</div>
+        <div class="flow-step"><b>Mapping</b><span>Printer / reader / scanner</span></div><div class="flow-arrow">→</div>
+        <div class="flow-step hl"><b>Stock mgmt</b><span>Omunim software</span></div><div class="flow-arrow">→</div>
+        <div class="flow-step hl"><b>Stock tally</b><span>Mobile RFID tally</span></div><div class="flow-arrow">→</div>
+        <div class="flow-step"><b>Missing items</b><span>Exact item codes</span></div><div class="flow-arrow">→</div>
+        <div class="flow-step"><b>Security</b><span>RFID / AM+RFID gate</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= COMPLETE RFID SOLUTION ================= -->
+<section id="solution" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>Complete RFID solution for <span class="grad-orange">showroom security</span> & stock tally</h2>
+      <p>The two things every jeweller worries about — theft and stock mismatch — handled by one RFID system in Omunim.</p>
+    </div>
+    <div class="grid2">
+      <div class="card reveal" style="border-color:rgba(61,220,132,.3)">
+        <img class="hw-photo tall" src="assets/hardware/rfid-gate.jpg" alt="RFID security gate" loading="lazy">
+        <span class="pill g">Showroom Security</span>
+        <h3 style="margin-top:12px">Anti-Theft Protection</h3>
+        <p>The gate watches the exit so your staff doesn't have to — every tagged item passing through is detected and identified.</p>
+        <ul>
+          <li>Automatic detection at the showroom exit</li>
+          <li>Item identified, billing status checked, alert raised</li>
+          <li>AM + RFID gate + tags for dual-layer protection</li>
+        </ul>
+      </div>
+      <div class="card reveal" style="border-color:rgba(77,124,255,.35)">
+        <img class="hw-photo tall" src="assets/hardware/seuic-touch2.jpg" alt="Seuic AUTO Touch 2 for stock tally" loading="lazy">
+        <span class="pill b">Stock Tally</span>
+        <h3 style="margin-top:12px">Fast Stock Counting</h3>
+        <p>Walk the showroom with the mobile app — the reader picks up dozens of tags at once, no piece-by-piece scanning.</p>
+        <ul>
+          <li>Bulk reading, no line of sight needed</li>
+          <li>Instant Found / Missing (by exact code) / Extra report</li>
+          <li>Example: 500 items → 497 found → 3 missing identified</li>
+        </ul>
+      </div>
+    </div>
+    <div class="band reveal" style="margin-top:28px;text-align:center">
+      <h2>Tally it. <span class="grad-orange">Secure it.</span></h2>
+      <p class="lead" style="margin:0 auto 26px;max-width:600px">One mapping, one software, one workflow — set it up once, and your showroom runs itself.</p>
+      <div class="hero-ctas" style="justify-content:center;margin-bottom:0">
+        <a href="#simulator" class="btn btn-primary">See it in action — try the simulator</a>
+        <a href="#hardware" class="btn btn-ghost">View hardware</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SIMULATOR ================= -->
+<section id="simulator" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>Try the RFID flow <span class="grad-blue">yourself</span></h2>
+      <p>Pick a tag, choose a mapping method, run a live stock tally and get your recommended solution — right here in the browser.</p>
+    </div>
+
+    <div class="sim reveal" id="sim">
+      <div class="sim-dots">
+        <div class="sim-dot active" data-goto="1"><b>1</b><span>Tag</span></div>
+        <div class="sim-line"></div>
+        <div class="sim-dot" data-goto="2"><b>2</b><span>Mapping</span></div>
+        <div class="sim-line"></div>
+        <div class="sim-dot" data-goto="3"><b>3</b><span>Stock tally</span></div>
+        <div class="sim-line"></div>
+        <div class="sim-dot" data-goto="4"><b>4</b><span>Solution</span></div>
+      </div>
+
+      <!-- STEP 1 -->
+      <div class="sim-panel" id="simP1">
+        <h3>Step 1 — Choose your RFID tag</h3>
+        <p class="sim-sub">Which tag fits your showroom?</p>
+        <div class="sim-cards">
+          <button class="sim-card" data-tag="onetime">
+            <img class="thumb" src="assets/hardware/tag-onetime.jpg" alt="One-time-use RFID tag with tail" loading="lazy">
+            <b>One-Time-Use Tag</b><span>Tail tag for jewellery · automatic mapping via printer</span>
+          </button>
+          <button class="sim-card" data-tag="reusable">
+            <img class="thumb" src="assets/hardware/tag-reusable.jpg" alt="Reusable RFID tag" loading="lazy">
+            <b>Reusable Tag</b><span>Hard PVC tag, use again · manual mapping, no printer needed</span>
+          </button>
+          <button class="sim-card" data-tag="amrfid">
+            <b>AM + RFID Tag</b><span>Stock management + anti-theft in one tag</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="sim-panel hidden" id="simP2">
+        <h3>Step 2 — Choose your mapping method</h3>
+        <p class="sim-sub" id="mapNote"></p>
+        <div class="sim-cards" id="mapCards"></div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="sim-panel hidden" id="simP3">
+        <h3>Step 3 — Run a stock tally</h3>
+        <p class="sim-sub">24 items mapped in software. Press scan — the RFID reader picks up <b>multiple tags at once</b>, just like the real hardware.</p>
+        <div class="shelf" id="shelf"></div>
+        <div class="sim-scanrow">
+          <button class="btn btn-primary" id="scanBtn">Start RFID scan</button>
+          <div class="scan-progress"><div id="scanBar"></div></div>
+        </div>
+        <div class="tally-results hidden" id="tallyResults">
+          <div class="tstat"><b>24</b><span>Software stock</span></div>
+          <div class="tstat"><b>24</b><span>RFID scanned</span></div>
+          <div class="tstat ok"><b id="foundN">21</b><span>Found</span></div>
+          <div class="tstat miss"><b id="missN">2</b><span>Missing</span></div>
+          <div class="tstat extra"><b>1</b><span>Extra</span></div>
+        </div>
+        <div class="miss-list hidden" id="missList"></div>
+      </div>
+
+      <!-- STEP 4 -->
+      <div class="sim-panel hidden" id="simP4">
+        <h3>Step 4 — Your recommended solution</h3>
+        <p class="sim-sub">Based on your choices, this is the setup Omunim recommends:</p>
+        <div id="solutionCard" class="solution"></div>
+        <label class="gate-toggle"><input type="checkbox" id="gateCheck"> <span>Add showroom <b>security gate</b> to this solution</span></label>
+        <div class="sim-final">
+          <button class="btn btn-ghost btn-sm" id="simRestart">↺ Restart simulator</button>
+          <a href="https://omunim.com/signin" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Get this solution</a>
+        </div>
+      </div>
+
+      <div class="sim-nav">
+        <button class="btn btn-ghost btn-sm" id="simBack">← Back</button>
+        <button class="btn btn-primary btn-sm" id="simNext">Next →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DEMO VIDEOS ================= -->
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head">      <h2>Real hardware, <span class="grad-orange">real demos</span></h2>
+    </div>
+    <div class="grid2">
+      <a class="vid-card reveal" href="https://youtu.be/719YCh2Yc7w" target="_blank" rel="noopener">
+        <img src="https://img.youtube.com/vi/719YCh2Yc7w/hqdefault.jpg" alt="RFID printer demo" loading="lazy">
+        <div><b>RFID Printer Demo</b><span>One-time tag printing with automatic mapping</span></div>
+      </a>
+      <a class="vid-card reveal" href="https://youtube.com/shorts/x_0Lje_HtKk" target="_blank" rel="noopener">
+        <img src="https://img.youtube.com/vi/x_0Lje_HtKk/hqdefault.jpg" alt="Desktop reader mapping demo" loading="lazy">
+        <div><b>Desktop Reader Mapping</b><span>Manual mapping of reusable tags</span></div>
+      </a>
+      <a class="vid-card reveal" href="https://youtu.be/FxUdRryW1vU" target="_blank" rel="noopener">
+        <img src="https://img.youtube.com/vi/FxUdRryW1vU/hqdefault.jpg" alt="Mobile RFID stock tally demo" loading="lazy">
+        <div><b>Mobile RFID Stock Tally</b><span>Full tally walkthrough on the mobile app</span></div>
+      </a>
+      <a class="vid-card reveal" href="https://youtu.be/D5sNxunBRW8" target="_blank" rel="noopener">
+        <img src="https://img.youtube.com/vi/D5sNxunBRW8/hqdefault.jpg" alt="Missing item identification demo" loading="lazy">
+        <div><b>Missing Item Identification</b><span>Finding the exact missing pieces</span></div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FINAL CTA ================= -->
+<section id="contact" style="padding-top:20px">
+  <div class="wrap">
+    <div class="band reveal" style="text-align:center">
+      <h2>Tag → Map → Tally → Secure.</h2>
+      <p class="lead" style="margin:0 auto 28px;max-width:560px;">Tell us your showroom size and current process — we'll recommend the exact RFID setup: tags, mapping device, tally workflow and gate.</p>
+      <div class="hero-ctas" style="justify-content:center;margin-bottom:0">
+        <a href="#simulator" class="btn btn-primary">Re-run the simulator</a>
+        <a href="#top" class="btn btn-ghost">Back to top</a>
+      </div>
+      <p class="micro" style="margin-top:18px">Hardware photos, exact pricing &amp; specs shared on demo call.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-grid">
+    <div>
+      <a class="brand" href="#top" style="margin-bottom:14px"><img src="assets/base.jpg" alt="Omunim logo">Omunim <b>RFID</b></a>
+      <p style="color:var(--faint);font-size:14px;max-width:300px">RFID-based jewellery stock management &amp; security for Omunim Jewellery Software.</p>
+    </div>
+    <div><h4>Product</h4><a href="#overview">Overview</a><a href="#tags">Tags</a><a href="#hardware">Hardware</a><a href="#security">Security</a></div>
+    <div><h4>Try</h4><a href="#simulator">Simulator</a><a href="#tally">Stock tally</a><a href="#compare">RFID vs barcode</a></div>
+    <div><h4>Company</h4><a href="#contact">Contact</a><a href="#top">Privacy</a><a href="#top">Terms</a></div>
+  </div>
+  <div class="wrap footer-bottom">© 2026 Omunim Jewellery Software · RFID Division. All rights reserved.</div>
+</footer>
+
+<style>
+  /* ---------- simulator ---------- */
+  .sim{background:rgba(10,13,26,.85);border:1px solid rgba(77,124,255,.3);border-radius:26px;padding:40px;max-width:900px;margin:0 auto;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+  .sim-dots{display:flex;align-items:center;justify-content:center;margin-bottom:34px}
+  .sim-dot{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;opacity:.45;transition:opacity .2s;background:none;border:none;color:var(--text);font-family:inherit}
+  .sim-dot b{width:38px;height:38px;border-radius:50%;border:2px solid var(--card-border);display:flex;align-items:center;justify-content:center;font-size:15px}
+  .sim-dot span{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .sim-dot.active{opacity:1}
+  .sim-dot.active b{border-color:var(--orange);color:var(--orange-soft);box-shadow:0 0 16px rgba(255,154,60,.4)}
+  .sim-dot.done{opacity:.9}
+  .sim-dot.done b{border-color:var(--green);color:var(--green)}
+  .sim-line{width:56px;height:2px;background:var(--card-border);margin:0 10px 22px}
+  .sim-panel h3{font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
+  .sim-sub{text-align:center;color:var(--muted);font-size:15px;margin-bottom:24px}
+  .sim-sub b{color:var(--text)}
+  .hidden{display:none!important}
+  .sim-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:8px}
+  .sim-card{background:var(--card);border:2px solid var(--card-border);border-radius:16px;padding:22px 18px;color:var(--text);cursor:pointer;text-align:left;font-family:inherit;transition:border-color .2s,background .2s,transform .15s}
+  .sim-card:hover{transform:translateY(-3px);border-color:rgba(255,154,60,.5)}
+  .sim-card.selected{border-color:var(--orange);background:rgba(255,154,60,.08);box-shadow:0 0 24px rgba(255,154,60,.25)}
+  .sim-card b{display:block;font-size:16px;margin-bottom:6px}
+  .sim-card span{font-size:13.5px;color:var(--muted);line-height:1.5}
+  .sim-nav{display:flex;justify-content:space-between;margin-top:30px}
+  .shelf{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:24px}
+  .shelf .item{background:rgba(255,255,255,.05);border:1px solid var(--card-border);border-radius:10px;padding:10px 4px;text-align:center;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;transition:all .18s}
+  .shelf .item.scanning{background:rgba(77,124,255,.25);border-color:var(--blue);color:#fff;box-shadow:0 0 12px rgba(77,124,255,.6)}
+  .shelf .item.found{background:rgba(61,220,132,.13);border-color:rgba(61,220,132,.55);color:var(--green)}
+  .shelf .item.missing{background:rgba(255,93,93,.13);border-color:var(--red);color:var(--red);font-weight:700}
+  .shelf .item.extra{background:rgba(255,196,77,.13);border-color:var(--amber);color:var(--amber);font-weight:700}
+  .sim-scanrow{display:flex;gap:16px;align-items:center;margin-bottom:24px;flex-wrap:wrap}
+  .scan-progress{flex:1;min-width:180px;height:10px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden}
+  #scanBar{height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--blue-soft));border-radius:999px;transition:width .15s}
+  .tally-results{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+  .tstat{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:14px 8px;text-align:center}
+  .tstat b{display:block;font-size:24px}
+  .tstat span{font-size:12px;color:var(--muted)}
+  .tstat.ok b{color:var(--green)} .tstat.miss b{color:var(--red)} .tstat.extra b{color:var(--amber)}
+  .miss-list{background:rgba(255,93,93,.07);border:1px solid rgba(255,93,93,.35);border-radius:12px;padding:16px 20px;font-size:14px;color:var(--muted)}
+  .miss-list b{color:var(--red)} .miss-list .ex{color:var(--amber);font-weight:700}
+  .solution{background:var(--card);border:1px solid rgba(255,154,60,.35);border-radius:16px;padding:26px 28px;margin-bottom:20px}
+  .solution h4{font-size:17px;margin-bottom:14px}
+  .solution ul{list-style:none;display:grid;gap:10px}
+  .solution li{font-size:15px;color:var(--muted);padding-left:26px;position:relative}
+  .solution li::before{content:"→";position:absolute;left:0;color:var(--orange-soft);font-weight:800}
+  .solution li b{color:var(--text)}
+  .gate-toggle{display:flex;gap:10px;align-items:center;justify-content:center;cursor:pointer;font-size:15px;color:var(--muted);margin-bottom:24px}
+  .gate-toggle input{width:18px;height:18px;accent-color:var(--orange)}
+  .sim-final{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  /* ---------- video cards ---------- */
+  .vid-card{display:flex;gap:18px;align-items:center;background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:18px;text-decoration:none;color:var(--text);transition:transform .2s,border-color .2s}
+  .vid-card:hover{transform:translateY(-4px);border-color:rgba(255,93,93,.45)}
+  .vid-card img{width:150px;border-radius:10px;flex:none;aspect-ratio:16/9;object-fit:cover}
+  .vid-card b{display:block;font-size:16px;margin-bottom:4px}
+  .vid-card span{font-size:14px;color:var(--muted)}
+  .vid-card div{position:relative}
+  .vid-card div::after{content:"▶";position:absolute;right:-6px;top:-4px;color:var(--red);font-size:13px}
+  /* ---------- footer ---------- */
+  footer{border-top:1px solid var(--card-border);padding:64px 0 0;position:relative;z-index:1;background:rgba(5,6,14,.6)}
+  .footer-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:32px;padding-bottom:48px}
+  footer h4{font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);margin-bottom:16px}
+  footer .footer-grid a{display:block;color:var(--muted);text-decoration:none;font-size:14.5px;margin-bottom:10px}
+  footer .footer-grid a:hover{color:var(--text)}
+  .footer-bottom{border-top:1px solid var(--card-border);padding:22px 24px;color:var(--faint);font-size:13px;text-align:center}
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .6s ease,transform .6s ease}
+  .reveal.visible{opacity:1;transform:none}
+  @media (max-width:960px){
+    .hero-grid{grid-template-columns:1fr;gap:36px}
+    .hero{padding-top:130px}
+    .grid3{grid-template-columns:1fr 1fr}
+    .sim-cards{grid-template-columns:1fr}
+    .shelf{grid-template-columns:repeat(4,1fr)}
+    .tally-results{grid-template-columns:repeat(3,1fr)}
+    .band{padding:40px 28px}
+  }
+  /* nav collapses early: 7 links + CTA need room (also fixes wrapped links ~1024px) */
+  @media (max-width:1080px){
+    .nav-links{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;gap:0;background:rgba(5,6,14,.97);border-bottom:1px solid var(--card-border);padding:8px 24px 20px;margin:0}
+    .nav-links.open{display:flex}
+    .nav-links a{padding:12px 0;border-top:1px solid var(--card-border);white-space:nowrap}
+    #navCta{display:none}
+    .hamburger{display:block}
+  }
+  @media (max-width:640px){
+    section{padding:64px 0}
+    .grid3,.grid2{grid-template-columns:1fr}
+    .sim{padding:26px 20px}
+    .sim-line{width:22px}
+    .shelf{grid-template-columns:repeat(3,1fr)}
+    .tally-results{grid-template-columns:repeat(2,1fr)}
+    .footer-grid{grid-template-columns:1fr}
+    .vid-card img{width:110px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .star{animation:none}
+    .reveal{opacity:1;transform:none;transition:none}
+    html{scroll-behavior:auto}
+  }
+</style>
+
+<script>
+/* ============ eye tracking (verified implementation) ============ */
+(function () {
+  'use strict';
+  var GEOM = {
+    blue:  { x0: 0.4109375, y0: 0.3890625, x1: 0.4859375, y1: 0.45625  },
+    green: { x0: 0.5078125, y0: 0.3890625, x1: 0.5859375, y1: 0.459375 },
+    faceCenter: { x: 0.5, y: 0.4375 }
+  };
+  var REF_SIZE = 640, MAX_SHIFT_X = 5, MAX_SHIFT_Y = 4, LERP = 0.35;
+  var stage = document.getElementById('logoStage');
+  var eyeBlue = document.getElementById('eyeBlue');
+  var eyeGreen = document.getElementById('eyeGreen');
+  function place(layer, g) {
+    layer.style.left = (g.x0*100)+'%'; layer.style.top = (g.y0*100)+'%';
+    layer.style.width = ((g.x1-g.x0)*100)+'%'; layer.style.height = ((g.y1-g.y0)*100)+'%';
+  }
+  place(eyeBlue, GEOM.blue); place(eyeGreen, GEOM.green);
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var pointer = null, cur = {x:0,y:0}, tgt = {x:0,y:0};
+  window.addEventListener('pointermove', function (e) { pointer = {x:e.clientX, y:e.clientY}; }, {passive:true});
+  (function () {
+    var q = new URLSearchParams(location.search);
+    if (q.has('tx') && q.has('ty')) {
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        clientX: parseFloat(q.get('tx'))*window.innerWidth,
+        clientY: parseFloat(q.get('ty'))*window.innerHeight }));
+      var n = 0, settle = function(){ if(++n>90) document.title='SETTLED'; else requestAnimationFrame(settle); };
+      requestAnimationFrame(settle);
+    }
+  })();
+  function frame(now) {
+    var rect = stage.getBoundingClientRect(), scale = rect.width / REF_SIZE;
+    if (pointer && !reduceMotion) {
+      var fcx = rect.left + GEOM.faceCenter.x*rect.width;
+      var fcy = rect.top + GEOM.faceCenter.y*rect.height;
+      var nx = Math.max(-1, Math.min(1, (pointer.x-fcx)/(window.innerWidth/2)));
+      var ny = Math.max(-1, Math.min(1, (pointer.y-fcy)/(window.innerHeight/2)));
+      tgt.x = nx*MAX_SHIFT_X*scale; tgt.y = ny*MAX_SHIFT_Y*scale;
+    }
+    cur.x += (tgt.x-cur.x)*LERP; cur.y += (tgt.y-cur.y)*LERP;
+    if (Math.abs(cur.x)<0.01) cur.x=0; if (Math.abs(cur.y)<0.01) cur.y=0;
+    var open = 1;
+    if (!reduceMotion && now) {
+      var bt = now % 3000;
+      if (bt < 220) open = 1 - Math.sin((bt/220)*Math.PI)*0.92;
+    }
+    var t = 'translate3d('+cur.x.toFixed(2)+'px,'+cur.y.toFixed(2)+'px,0) scaleY('+open.toFixed(3)+')';
+    eyeBlue.style.transform = t; eyeGreen.style.transform = t;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ============ typewriter headline ============ */
+(function () {
+  'use strict';
+  var el = document.getElementById('typed');
+  if (!el) return;
+  var phrases = ['Stock Tally', 'Showroom Security', 'Jewellery ERP', 'Mobile App'];
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduceMotion) { el.textContent = phrases[0]; return; }
+  var TYPE_MS = 75, DELETE_MS = 38, HOLD_MS = 1700, GAP_MS = 420;
+  var pi = 0, ci = 0, deleting = false;
+  function tick() {
+    var word = phrases[pi];
+    if (!deleting) {
+      ci++;
+      el.textContent = word.slice(0, ci);
+      if (ci === word.length) { deleting = true; setTimeout(tick, HOLD_MS); return; }
+      setTimeout(tick, TYPE_MS + Math.random()*40);
+    } else {
+      ci--;
+      el.textContent = word.slice(0, ci);
+      if (ci === 0) { deleting = false; pi = (pi+1) % phrases.length; setTimeout(tick, GAP_MS); return; }
+      setTimeout(tick, DELETE_MS);
+    }
+  }
+  setTimeout(tick, 600);
+})();
+
+/* ============ starfield / nav / reveal ============ */
+(function () {
+  var box = document.getElementById('stars');
+  for (var i=0;i<110;i++) {
+    var s = document.createElement('div'); s.className='star';
+    var sz = (Math.random()*2+1).toFixed(1);
+    s.style.cssText = 'left:'+(Math.random()*100)+'%;top:'+(Math.random()*100)+'%;width:'+sz+'px;height:'+sz+'px;animation-delay:'+(Math.random()*3.5).toFixed(2)+'s;';
+    box.appendChild(s);
+  }
+  var nav = document.getElementById('nav');
+  window.addEventListener('scroll', function(){ nav.classList.toggle('scrolled', window.scrollY>24); }, {passive:true});
+  var ham = document.getElementById('hamburger'), links = document.getElementById('navLinks');
+  ham.addEventListener('click', function(){ links.classList.toggle('open'); });
+  links.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', function(){ links.classList.remove('open'); }); });
+  /* bulletproof anchor scrolling — works in iframes & all browsers */
+  document.querySelectorAll('a[href^="#"]').forEach(function(a){
+    a.addEventListener('click', function(e){
+      var id = a.getAttribute('href').slice(1);
+      var t = id && document.getElementById(id);
+      if (t) { e.preventDefault(); t.scrollIntoView({behavior:'smooth', block:'start'}); }
+    });
+  });
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('visible'); io.unobserve(e.target); } });
+  }, {threshold:.1});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+})();
+
+/* ============ RFID SIMULATOR ============ */
+(function () {
+  'use strict';
+  var TAGS = {
+    onetime:  { name:'One-Time-Use RFID Tag', short:'One-Time Tag' },
+    reusable: { name:'Reusable RFID Tag', short:'Reusable Tag' },
+    amrfid:   { name:'AM + RFID Tag', short:'AM + RFID Tag' }
+  };
+  var MAPS = {
+    onetime: [
+      { id:'printer', name:'TSC T820 RFID Printer', img:'assets/hardware/tsc-t820.jpg', desc:'Prints the tag and maps it automatically during printing. Very fast — best for high-volume tagging.' }
+    ],
+    reusable: [
+      { id:'desktop', name:'RFID Desktop Reader', img:null, desc:'Fixed counter mapping. Place the tag near the reader — it detects the RFID number, you save the mapping.' },
+      { id:'scanner', name:'Seuic AUTO Touch 2', img:'assets/hardware/seuic-touch2.jpg', desc:'Portable UHF handheld. Manual mapping plus mobile stock tally — showroom and stockroom in one device.' }
+    ],
+    amrfid: [
+      { id:'printer', name:'TSC T820 RFID Printer', img:'assets/hardware/tsc-t820.jpg', desc:'Prints the tag and maps it automatically during printing. Very fast — best for high-volume tagging.' }
+    ]
+  };
+
+  var state = { step:1, tag:null, mapping:null, scanned:false };
+  var dots = Array.prototype.slice.call(document.querySelectorAll('.sim-dot'));
+  var panels = [1,2,3,4].map(function(i){ return document.getElementById('simP'+i); });
+  var btnBack = document.getElementById('simBack');
+  var btnNext = document.getElementById('simNext');
+
+  function show(step, scroll) {
+    state.step = step;
+    panels.forEach(function(p,i){ p.classList.toggle('hidden', i !== step-1); });
+    dots.forEach(function(d,i){
+      d.classList.toggle('active', i === step-1);
+      d.classList.toggle('done', i < step-1);
+    });
+    btnBack.style.visibility = step === 1 ? 'hidden' : 'visible';
+    btnNext.textContent = step === 4 ? 'Done ✓' : (step === 3 && !state.scanned ? 'Skip scan →' : 'Next →');
+    if (scroll !== false) document.getElementById('sim').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+  dots.forEach(function(d){
+    d.addEventListener('click', function(){
+      var g = parseInt(d.getAttribute('data-goto'),10);
+      if (g === 2 && !state.tag) return;
+      if (g >= 3 && !state.mapping) return;
+      show(g);
+    });
+  });
+
+  /* step 1: tag select */
+  Array.prototype.forEach.call(document.querySelectorAll('#simP1 .sim-card'), function(c){
+    c.addEventListener('click', function(){
+      Array.prototype.forEach.call(document.querySelectorAll('#simP1 .sim-card'), function(x){ x.classList.remove('selected'); });
+      c.classList.add('selected');
+      state.tag = c.getAttribute('data-tag');
+      state.mapping = null;
+      renderMaps();
+    });
+  });
+
+  /* step 2: mapping options depend on tag */
+  function renderMaps() {
+    var box = document.getElementById('mapCards');
+    box.innerHTML = '';
+    document.getElementById('mapNote').textContent =
+      'Tag: ' + TAGS[state.tag].name + ' — ' +
+      (state.tag === 'onetime' ? 'automatic mapping via printer.' :
+       state.tag === 'amrfid' ? 'automatic mapping via printer.' :
+       'manual mapping — pick the device that suits your counter.');
+    MAPS[state.tag].forEach(function(m){
+      var b = document.createElement('button');
+      b.className = 'sim-card' + (MAPS[state.tag].length === 1 ? ' selected' : '');
+      b.innerHTML = (m.img ? '<img class="thumb" src="'+m.img+'" alt="'+m.name+'" loading="lazy">' : '') +
+                    '<b>'+m.name+'</b><span>'+m.desc+'</span>';
+      b.addEventListener('click', function(){
+        Array.prototype.forEach.call(box.children, function(x){ x.classList.remove('selected'); });
+        b.classList.add('selected');
+        state.mapping = m.id;
+      });
+      box.appendChild(b);
+    });
+    if (MAPS[state.tag].length === 1) state.mapping = MAPS[state.tag][0].id;
+  }
+
+  /* step 3: shelf + scan */
+  var CATS = [['G-RG','Ring'],['G-NK','Necklace'],['G-ER','Earring'],['G-BN','Bangle']];
+  var items = [];
+  for (var i=0;i<24;i++){
+    var c = CATS[i % 4];
+    items.push({ code: c[0]+'-'+(1001+i), missing: (i===7 || i===18), el:null });
+  }
+  var shelf = document.getElementById('shelf');
+  items.forEach(function(it){
+    var d = document.createElement('div');
+    d.className = 'item'; d.textContent = it.code;
+    shelf.appendChild(d); it.el = d;
+  });
+  var scanning = false;
+  document.getElementById('scanBtn').addEventListener('click', function(){
+    if (scanning) return;
+    scanning = true; state.scanned = true;
+    var btn = this; btn.disabled = true; btn.style.opacity = .55; btn.textContent = 'Scanning…';
+    document.getElementById('tallyResults').classList.add('hidden');
+    document.getElementById('missList').classList.add('hidden');
+    items.forEach(function(it){ it.el.className = 'item'; });
+    var bar = document.getElementById('scanBar');
+    var queue = items.slice(), done = 0;
+    /* bulk-read waves: several tags per tick, like real RFID */
+    var tick = setInterval(function(){
+      var wave = queue.splice(0, 3 + Math.floor(Math.random()*3));
+      if (!wave.length) {
+        clearInterval(tick);
+        finishScan(btn, bar);
+        return;
+      }
+      wave.forEach(function(it){ it.el.classList.add('scanning'); });
+      setTimeout(function(){ wave.forEach(function(it){ it.el.classList.remove('scanning'); it.el.classList.add('found'); }); }, 220);
+      done += wave.length;
+      bar.style.width = Math.round(done/items.length*100) + '%';
+    }, 160);
+  });
+  function finishScan(btn, bar) {
+    bar.style.width = '100%';
+    var missing = items.filter(function(it){ return it.missing; });
+    missing.forEach(function(it){ it.el.classList.remove('found'); it.el.classList.add('missing'); });
+    /* one unexpected extra item */
+    var ex = document.createElement('div');
+    ex.className = 'item extra'; ex.textContent = 'G-RG-2099 ?';
+    ex.title = 'Unexpected item — not in software stock';
+    shelf.appendChild(ex);
+    document.getElementById('foundN').textContent = items.length - missing.length;
+    document.getElementById('missN').textContent = missing.length;
+    document.getElementById('tallyResults').classList.remove('hidden');
+    var ml = document.getElementById('missList');
+    ml.innerHTML = '<b>Missing ('+missing.length+'):</b> ' +
+      missing.map(function(it){ return it.code; }).join(', ') +
+      ' — identified by RFID mapping.<br><span class="ex">Extra (1):</span> G-RG-2099 — scanned but not in software stock.';
+    ml.classList.remove('hidden');
+    btn.textContent = 'Scan complete ✓';
+    btnNext.textContent = 'Next →';
+    scanning = false;
+  }
+
+  /* step 4: solution */
+  var gateCheck = document.getElementById('gateCheck');
+  function renderSolution() {
+    var mapName = MAPS[state.tag].filter(function(m){ return m.id === state.mapping; })[0].name;
+    var gate = gateCheck.checked;
+    var gateName = state.tag === 'amrfid' ? 'AM + RFID Security Gate' : 'RFID Security Gate';
+    var html = '<h4>Your setup</h4><ul>' +
+      '<li><b>Tags:</b> ' + TAGS[state.tag].name + '</li>' +
+      '<li><b>Mapping:</b> ' + mapName + (state.tag === 'onetime' || state.tag === 'amrfid' ? ' (automatic)' : ' (manual)') + '</li>' +
+      '<li><b>Software:</b> Omunim Jewellery Software — stock management &amp; mapping</li>' +
+      '<li><b>Stock tally:</b> Mobile RFID tally — bulk scan, missing &amp; extra detection</li>' +
+      (gate ? '<li><b>Security:</b> ' + gateName + ' at the showroom exit</li>' : '') +
+      '</ul>';
+    document.getElementById('solutionCard').innerHTML = html;
+  }
+  gateCheck.addEventListener('change', renderSolution);
+  document.getElementById('simRestart').addEventListener('click', function(){
+    state = { step:1, tag:null, mapping:null, scanned:false };
+    gateCheck.checked = false;
+    Array.prototype.forEach.call(document.querySelectorAll('#simP1 .sim-card'), function(x){ x.classList.remove('selected'); });
+    items.forEach(function(it){ it.el.className = 'item'; });
+    var ex = shelf.querySelector('.extra'); if (ex) ex.remove();
+    document.getElementById('scanBar').style.width = '0';
+    document.getElementById('tallyResults').classList.add('hidden');
+    document.getElementById('missList').classList.add('hidden');
+    var btn = document.getElementById('scanBtn');
+    btn.disabled = false; btn.style.opacity = 1; btn.textContent = 'Start RFID scan';
+    show(1);
+  });
+
+  btnBack.addEventListener('click', function(){ if (state.step > 1) show(state.step - 1); });
+  btnNext.addEventListener('click', function(){
+    if (state.step === 1 && !state.tag) { alert('Please choose a tag type first.'); return; }
+    if (state.step === 2 && !state.mapping) { alert('Please choose a mapping method.'); return; }
+    if (state.step === 4) { document.getElementById('contact').scrollIntoView({behavior:'smooth'}); return; }
+    if (state.step === 3) renderSolution();
+    show(Math.min(4, state.step + 1));
+  });
+  show(1, false);
+})();
+</script>
+</body>
+</html>
