@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OMUNIM RFID Games — Showroom Heist &amp; Tally Rush</title>
+<style>
+  :root{ --bg:#fff7ec; --ink:#3a2a18; --gold:#d9a441; }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%, #fff3dd, var(--bg));color:var(--ink);
+       font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;}
+  header{padding:18px 16px 4px;text-align:center}
+  header h1{margin:0;font-size:clamp(24px,4vw,38px);letter-spacing:-.02em}
+  header h1 .g{background:linear-gradient(90deg,#f2790f,#d9a441);-webkit-background-clip:text;background-clip:text;color:transparent}
+  header p{margin:6px 0 0;color:#8a6f4d}
+  #menu{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;padding:14px;max-width:1000px}
+  .card{background:#fff;border:2px solid #f0dfc0;border-radius:18px;padding:22px;width:320px;
+        box-shadow:0 8px 24px rgba(217,164,65,.15);text-align:center}
+  .card h2{margin:0 0 8px;font-size:22px}
+  .card p{color:#8a6f4d;font-size:14.5px;min-height:88px;margin:0 0 14px}
+  .card .emoji{font-size:44px;margin-bottom:6px}
+  button{font:inherit;cursor:pointer;border:0;border-radius:999px;padding:10px 22px;font-weight:700}
+  .btn-gold{background:linear-gradient(180deg,#f5b942,#e08a1e);color:#fff;box-shadow:0 4px 14px rgba(224,138,30,.35)}
+  .btn-gold:active{transform:scale(.96)}
+  .btn-ghost{background:#fff;border:2px solid #e8d5b5;color:#7a5c33}
+  #gamebar{display:none;gap:10px;margin:10px 0;flex-wrap:wrap;justify-content:center}
+  #stage{position:relative;width:min(96vw,980px);}
+  canvas{width:100%;height:auto;display:block;border-radius:16px;background:#fffdf8;
+         box-shadow:0 12px 40px rgba(120,80,20,.18);touch-action:none;user-select:none;-webkit-user-select:none}
+  .hint{font-size:13px;color:#8a6f4d;text-align:center;max-width:660px;padding:2px 16px 26px;margin:8px 0 0}
+  kbd{background:#fff;border:1px solid #d9c49a;border-bottom-width:3px;border-radius:6px;padding:1px 7px;font-family:inherit;font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🛡️ <span class="g">OMUNIM RFID</span> Games</h1>
+  <p>Two mini-games that show how RFID protects and counts a jewellery showroom.</p>
+</header>
+
+<div id="menu">
+  <div class="card">
+    <div class="emoji">🚨</div>
+    <h2>Showroom Heist</h2>
+    <p>A thief is pocketing jewellery and heading for the exit. The <b>RFID gate</b> flags unbilled tags — <b>tap the thief</b> before they escape! But don't accuse innocent shoppers.</p>
+    <button class="btn-gold" data-play="g1">▶ Play Security Game</button>
+  </div>
+  <div class="card">
+    <div class="emoji">📡</div>
+    <h2>Tally Rush</h2>
+    <p>Closing time! Walk the showroom with your <b>RFID reader</b> and scan every tag before the clock runs out. One wave reads everything nearby — no piece-by-piece scanning.</p>
+    <button class="btn-gold" data-play="g2">▶ Play Tally Game</button>
+  </div>
+</div>
+
+<div id="gamebar">
+  <button class="btn-ghost" id="btnBack">← Menu</button>
+  <button class="btn-ghost" id="btnMute">🔊 Sound</button>
+  <button class="btn-gold" id="btnFinish" style="display:none">Finish Tally</button>
+</div>
+
+<div id="stage"><canvas id="game" width="960" height="600"></canvas></div>
+<p class="hint" id="hint"></p>
+
+<script>
+'use strict';
+/* ============================================================
+   OMUNIM RFID Games — Showroom Heist + Tally Rush
+   Single-file canvas games. No external assets.
+   ============================================================ */
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const W = 960, H = 600;
+
+/* ---------------- audio (WebAudio, no files) ---------------- */
+let muted = false, AC = null;
+function beep(freq, dur, type, vol, when){
+  if(muted) return;
+  try{
+    dur = dur||0.12; type = type||'sine'; vol = vol||0.16; when = when||0;
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if(!Ctor) return;
+    AC = AC || new Ctor();
+    if(AC.state === 'suspended') AC.resume();
+    const t = AC.currentTime + when;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(t); o.stop(t + dur + 0.03);
+  }catch(e){}
+}
+const sfx = {
+  scan(){ beep(880,0.07,'sine',0.10); },
+  alarm(){ beep(680,0.14,'square',0.09); beep(520,0.14,'square',0.09,0.15); },
+  caught(){ [523,659,784,1046].forEach((f,i)=>beep(f,0.11,'triangle',0.15,i*0.08)); },
+  bad(){ beep(150,0.28,'sawtooth',0.13); },
+  win(){ [523,659,784,1046,1318].forEach((f,i)=>beep(f,0.15,'triangle',0.15,i*0.10)); },
+  tick(){ beep(1250,0.05,'sine',0.07); },
+  step(){ beep(300+Math.random()*120,0.05,'sine',0.05); }
+};
+
+/* ---------------- helpers ---------------- */
+function rr(x,y,w,h,r){
+  r = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);     ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function circle(x,y,r){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); }
+function ell(x,y,rx,ry){ ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); }
+function rnd(a,b){ return a + Math.random()*(b-a); }
+function pick(a){ return a[(Math.random()*a.length)|0]; }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function dist(x1,y1,x2,y2){ return Math.hypot(x2-x1,y2-y1); }
+function txt(s,x,y,size,color,align,weight){
+  ctx.font = (weight||700)+' '+size+'px "Segoe UI",system-ui,sans-serif';
+  ctx.textAlign = align||'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = color||'#3a2a18';
+  ctx.fillText(s,x,y);
+}
+const SKIN = ['#f6cf9f','#eab886','#d99e63','#c98a54'];
+const SHIRT = ['#4d7cff','#e14b5a','#3ddc84','#f5a623','#9b59b6','#2ec4b6','#ef6f9c','#6c8cff'];
+
+/* ---------------- state machine ---------------- */
+let state = 'menu';           // menu | g1 | g1over | g2 | g2over
+let overBtns = [];            // clickable rects on game-over panels
+const hintEl = document.getElementById('hint');
+const menuEl = document.getElementById('menu');
+const barEl = document.getElementById('gamebar');
+const btnFinish = document.getElementById('btnFinish');
+
+function showMenu(){
+  state = 'menu';
+  menuEl.style.display = 'flex';
+  barEl.style.display = 'none';
+  hintEl.innerHTML = '';
+}
+function startGame(g){
+  menuEl.style.display = 'none';
+  barEl.style.display = 'flex';
+  btnFinish.style.display = (g==='g2') ? '' : 'none';
+  if(g==='g1'){ G1.reset(); state='g1';
+    hintEl.innerHTML = '⚠️ When the gate flashes <b style="color:#d33">red</b>, tap the thief fast! Green flash = honest shopper, leave them alone.';
+  }else{ G2.reset(); state='g2';
+    hintEl.innerHTML = 'Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrow keys, or <b>drag</b> on the floor. The blue ring is your reader — everything inside it scans at once.';
+  }
+}
+document.querySelectorAll('[data-play]').forEach(b=>{
+  b.addEventListener('click', ()=>startGame(b.getAttribute('data-play')));
+});
+document.getElementById('btnBack').addEventListener('click', showMenu);
+document.getElementById('btnMute').addEventListener('click', function(){
+  muted = !muted; this.textContent = muted ? '🔇 Muted' : '🔊 Sound';
+});
+btnFinish.addEventListener('click', ()=>{ if(state==='g2') G2.finish(); });
+window.addEventListener('keydown', e=>{
+  if(e.key==='m'||e.key==='M'){ muted=!muted;
+    document.getElementById('btnMute').textContent = muted?'🔇 Muted':'🔊 Sound'; }
+});
+
+/* canvas pointer -> game coords */
+function toGame(e){
+  const r = cv.getBoundingClientRect();
+  const cx = (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
+  const cy = (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY);
+  return { x:(cx-r.left)*W/r.width, y:(cy-r.top)*H/r.height };
+}
+cv.addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  const p = toGame(e);
+  if(state==='g1') G1.tap(p.x,p.y);
+  else if(state==='g2') G2.pointer(p.x,p.y,true);
+  else if(state==='g1over'||state==='g2over'){
+    for(const b of overBtns){
+      if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h){ b.fn(); break; }
+    }
+  }
+});
+cv.addEventListener('pointermove', e=>{
+  if(state!=='g2') return;
+  const p = toGame(e);
+  if(e.buttons>0 || e.pointerType==='touch') G2.pointer(p.x,p.y,false);
+});
+cv.addEventListener('contextmenu', e=>e.preventDefault());
+/* ============================================================
+   GAME 1 — SHOWROOM HEIST (RFID gate security)
+   Shoppers walk in. Some pocket jewellery and run for the exit.
+   The RFID gate flags unbilled tags — tap the thief in time!
+   ============================================================ */
+const G1 = {
+  t:0, dur:90, score:0, caught:0, escaped:0, falseHits:0,
+  people:[], parts:[], floats:[],
+  spawnT:0.5, gateFlash:0, gateColor:'#3ddc84', lockT:0,
+  lanes:[372,428,484], counters:[{x:200},{x:400},{x:600}],
+  billingX:742, gateX:872,
+  codes:['RJ-1042','NK-2231','BR-0874','ER-5520','PN-9133','GL-6610'],
+
+  reset(){
+    this.t=0; this.score=0; this.caught=0; this.escaped=0; this.falseHits=0;
+    this.people=[]; this.parts=[]; this.floats=[];
+    this.spawnT=0.6; this.gateFlash=0; this.lockT=0;
+    this.counters.forEach(c=>c.flash=0);
+  },
+
+  spawn(){
+    const lane = (Math.random()*3)|0;
+    const diff = 1 + this.t/this.dur*0.55;
+    this.people.push({
+      x:-30, y:this.lanes[lane], lane,
+      speed:rnd(52,88)*diff, seed:Math.random()*10,
+      color:pick(SHIRT), skin:pick(SKIN),
+      state:'enter', timer:0, targetX:0,
+      thief:false, paid:false, flagged:false, done:false, gone:false,
+      code:pick(this.codes)
+    });
+  },
+
+  update(dt){
+    this.t += dt;
+    const remain = this.dur - this.t;
+    if(remain <= 5.05 && remain > 0 && Math.ceil(remain)!==Math.ceil(remain+dt)) sfx.tick();
+    if(remain <= 0){ this.finish(); return; }
+
+    // spawn pacing
+    this.spawnT -= dt;
+    const gap = Math.max(1.05, 2.5 - this.t*0.016);
+    if(this.spawnT<=0 && this.people.length<9){ this.spawn(); this.spawnT = gap*rnd(0.8,1.2); }
+    if(this.lockT>0) this.lockT-=dt;
+    if(this.gateFlash>0) this.gateFlash-=dt;
+    this.counters.forEach(c=>{ if(c.flash>0) c.flash-=dt; });
+
+    for(const p of this.people){
+      const sp = p.speed*dt;
+      switch(p.state){
+        case 'enter': {
+          if(p.targetX===0) p.targetX = pick(this.counters).x + rnd(-24,24);
+          p.x += sp;
+          if(p.x>=p.targetX){ p.state='browse'; p.timer=rnd(1.6,3.6); }
+          break; }
+        case 'browse':
+          p.timer-=dt;
+          if(p.timer<=0){
+            if(Math.random()<0.34){           // -> thief!
+              p.thief=true; p.state='toExit';
+              const c = this.counters.reduce((a,b)=>Math.abs(b.x-p.x)<Math.abs(a.x-p.x)?b:a);
+              c.flash=0.7;
+              this.floats.push({x:p.x,y:p.y-70,txt:'👀',t:0});
+            }else{ p.state='toBilling'; }
+          }
+          break;
+        case 'toBilling':
+          p.x += Math.sign(this.billingX-p.x)*sp;
+          if(Math.abs(p.x-this.billingX)<6){ p.state='billing'; p.timer=rnd(1.4,2.4); }
+          break;
+        case 'billing':
+          p.timer-=dt;
+          if(p.timer<=0){ p.paid=true; p.state='toExit'; }
+          break;
+        case 'toExit': {
+          const before = p.x;
+          p.x += sp*1.12;
+          if(before < this.gateX && p.x >= this.gateX) this.gateCheck(p);
+          if(p.x > W+24 && !p.gone){
+            p.gone=true;
+            if(p.flagged && !p.done){
+              p.done=true; this.escaped++;
+              this.score=Math.max(0,this.score-50);
+              this.floats.push({x:W-40,y:300,txt:'ESCAPED −50',color:'#d33',t:0});
+              sfx.bad();
+            }
+          }
+          break; }
+        case 'caught':
+          p.timer-=dt; if(p.timer<=0) p.gone=true;
+          break;
+      }
+    }
+    this.people = this.people.filter(p=>!p.gone);
+
+    // particles & floaters
+    for(const q of this.parts){ q.t+=dt; q.x+=q.vx*dt; q.y+=q.vy*dt; q.vy+=300*dt; }
+    this.parts = this.parts.filter(q=>q.t<q.life);
+    for(const f of this.floats) f.t+=dt;
+    this.floats = this.floats.filter(f=>f.t<1.4);
+  },
+
+  gateCheck(p){
+    if(p.thief && !p.paid){
+      p.flagged=true;
+      this.gateFlash=1.6; this.gateColor='#e63946';
+      sfx.alarm();
+      this.floats.push({x:this.gateX,y:250,txt:'⚠ UNBILLED '+p.code,color:'#d33',t:0,big:true});
+    }else{
+      this.gateFlash=0.7; this.gateColor='#3ddc84';
+    }
+  },
+
+  tap(x,y){
+    if(this.lockT>0) return;
+    // topmost = largest y (front)
+    const cands = this.people.filter(p=>!p.gone&&p.state!=='caught'&&dist(x,y,p.x,p.y-26)<30)
+                             .sort((a,b)=>b.y-a.y);
+    if(!cands.length) return;
+    const p = cands[0];
+    if(p.flagged && !p.done){
+      p.done=true; p.state='caught'; p.timer=0.9;
+      this.caught++; this.score+=100;
+      sfx.caught();
+      this.floats.push({x:p.x,y:p.y-80,txt:'CAUGHT! +100',color:'#1a9e4b',t:0,big:true});
+      for(let i=0;i<26;i++) this.parts.push({x:p.x,y:p.y-30,vx:rnd(-160,160),vy:rnd(-260,-40),
+        color:pick(['#f5b942','#e08a1e','#3ddc84','#fff']),t:0,life:rnd(0.5,1.1)});
+    }else{
+      this.falseHits++; this.score=Math.max(0,this.score-150);
+      this.lockT=1.0; sfx.bad();
+      this.floats.push({x:p.x,y:p.y-80,txt:'INNOCENT! −150',color:'#d33',t:0,big:true});
+    }
+  },
+
+  finish(){
+    state='g1over'; sfx.win();
+    overBtns=[
+      {x:W/2-220,y:440,w:200,h:52,fn:()=>startGame('g1'),label:'↻ Play again'},
+      {x:W/2+20, y:440,w:200,h:52,fn:showMenu,label:'← Menu'}
+    ];
+  },
+
+  /* ---------- drawing ---------- */
+  draw(){
+    // wall + floor
+    let g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#fff4e0'); g.addColorStop(0.55,'#ffedcf'); g.addColorStop(0.56,'#e9c98f'); g.addColorStop(1,'#d9b274');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(120,70,20,.08)';
+    for(let i=0;i<9;i++) ctx.fillRect(0,340+i*30,W,2);
+    // signage
+    txt('✨ OMUNIM JEWELLERY ✨',W/2,52,34,'#a06a1c','center',800);
+    txt('ENTRY',70,120,16,'#8a6f4d','center',700);
+    ctx.strokeStyle='#c9a25e'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(30,132); ctx.lineTo(110,132); ctx.stroke();
+    txt('EXIT →',905,120,16,'#8a6f4d','center',700);
+
+    // counters
+    for(const c of this.counters){
+      const flash = c.flash>0;
+      ctx.fillStyle = flash ? '#ffe9a8' : '#b07a3e';
+      rr(c.x-80,392,160,86,10); ctx.fill();
+      ctx.fillStyle = 'rgba(190,225,255,.55)';
+      rr(c.x-80,372,160,34,10); ctx.fill();
+      // jewellery sparkles
+      for(let i=0;i<4;i++){
+        const jx=c.x-54+i*36, jy=384+((i*37)%14);
+        const tw = 0.6+0.4*Math.sin(G1.t*3+i*1.7);
+        ctx.fillStyle='rgba(255,215,90,'+(0.55+0.4*tw)+')';
+        ctx.save(); ctx.translate(jx,jy); ctx.rotate(Math.PI/4);
+        const s=7+3*tw; ctx.fillRect(-s/2,-s/2,s,s); ctx.restore();
+        ctx.fillStyle='#fff'; circle(jx,jy,2); ctx.fill();
+      }
+      if(flash){ ctx.strokeStyle='#e63946'; ctx.lineWidth=4; rr(c.x-80,372,160,106,10); ctx.stroke(); }
+    }
+    // billing desk
+    ctx.fillStyle='#8a5a2b'; rr(this.billingX-52,400,104,78,10); ctx.fill();
+    ctx.fillStyle='#fff'; rr(this.billingX-52,388,104,26,8); ctx.fill();
+    txt('BILLING',this.billingX,402,15,'#7a5c33','center',800);
+
+    // RFID gate pedestals
+    const gx=this.gateX;
+    for(const px of [gx-26,gx+26]){
+      const gg=ctx.createLinearGradient(px-14,0,px+14,0);
+      gg.addColorStop(0,'#c9973f'); gg.addColorStop(0.5,'#f6d47c'); gg.addColorStop(1,'#c9973f');
+      ctx.fillStyle=gg; rr(px-15,300,30,200,10); ctx.fill();
+      ctx.fillStyle='#5b3d16'; circle(px,322,7); ctx.fill();
+    }
+    // scan beam
+    if(this.gateFlash>0){
+      ctx.globalAlpha = 0.28+0.14*Math.sin(this.t*18);
+      ctx.fillStyle=this.gateColor;
+      ctx.fillRect(gx-26,310,52,180);
+      ctx.globalAlpha=1;
+    }
+    txt('RFID GATE',gx,292,15,'#7a5c33','center',800);
+    // entry mat
+    ctx.fillStyle='rgba(217,164,65,.35)'; rr(24,470,120,40,8); ctx.fill();
+    txt('WELCOME',84,491,13,'#8a6f4d','center',700);
+
+    // people (back to front)
+    const ps=[...this.people].sort((a,b)=>a.y-b.y);
+    for(const p of ps) this.drawPerson(p);
+
+    // particles
+    for(const q of this.parts){
+      ctx.globalAlpha = 1-q.t/q.life;
+      ctx.fillStyle=q.color; circle(q.x,q.y,4); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+
+    // floaters
+    for(const f of this.floats){
+      const a = 1-f.t/1.4;
+      ctx.globalAlpha=a;
+      txt(f.txt,f.x,f.y-34*f.t,f.big?22:17,f.color||'#3a2a18','center',800);
+    }
+    ctx.globalAlpha=1;
+
+    // HUD
+    ctx.fillStyle='rgba(58,42,24,.85)'; rr(12,12,300,44,12); ctx.fill();
+    const remain=Math.max(0,Math.ceil(this.dur-this.t));
+    txt('⏱ '+remain+'s',40,35,20,'#fff','left',800);
+    txt('⭐ '+this.score,170,35,20,'#ffd76a','left',800);
+    txt('🚨 '+this.caught+' caught',300,35,15,'#fff','left',700);
+    if(this.lockT>0){ txt('wait…',W/2,80,20,'#d33','center',800); }
+    const flagged=this.people.some(p=>p.flagged&&!p.done&&p.state!=='caught');
+    if(flagged) txt('👆 TAP THE RED-FLAGGED THIEF!',W/2,84,22,'#d33','center',800);
+  },
+
+  drawPerson(p){
+    const walking = (p.state==='enter'||p.state==='toExit'||p.state==='toBilling');
+    const bob = walking ? Math.sin(this.t*11+p.seed)*2.2 : 0;
+    const caught = p.state==='caught';
+    // shadow
+    ctx.fillStyle='rgba(60,35,10,.18)'; ell(p.x,p.y+4,15,5.5); ctx.fill();
+    // body
+    ctx.fillStyle = caught ? '#9a9a9a' : p.color;
+    rr(p.x-12,p.y-46+bob,24,36,9); ctx.fill();
+    // head
+    ctx.fillStyle = p.skin; circle(p.x,p.y-54+bob,11.5); ctx.fill();
+    // hair
+    ctx.fillStyle='#4a3220';
+    ctx.beginPath(); ctx.arc(p.x,p.y-57+bob,11.5,Math.PI,Math.PI*2); ctx.fill();
+    // paid badge
+    if(p.paid && !p.thief){
+      ctx.fillStyle='#2fb457'; circle(p.x+13,p.y-62+bob,9); ctx.fill();
+      txt('✓',p.x+13,p.y-61+bob,12,'#fff','center',800);
+    }
+    // stolen bulge hint (very subtle — only visible if you watch closely)
+    if(p.thief && !p.flagged && p.state==='toExit'){
+      ctx.fillStyle='rgba(0,0,0,.25)'; ell(p.x+7,p.y-24+bob,5,7); ctx.fill();
+    }
+    // flagged ring
+    if(p.flagged && !p.done && !caught){
+      const pr = 26+4*Math.sin(this.t*14);
+      ctx.strokeStyle='#e63946'; ctx.lineWidth=4;
+      circle(p.x,p.y-30+bob,pr); ctx.stroke();
+      txt('THIEF!',p.x,p.y-92+bob,15,'#d33','center',800);
+    }
+    if(caught) txt('CAUGHT',p.x,p.y-80,16,'#1a9e4b','center',800);
+  },
+
+  drawOver(){
+    ctx.fillStyle='rgba(40,24,8,.72)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fffdf6'; rr(W/2-260,90,520,400,22); ctx.fill();
+    ctx.strokeStyle='#e8c877'; ctx.lineWidth=3; rr(W/2-260,90,520,400,22); ctx.stroke();
+    const net = this.caught*100 - this.escaped*50 - this.falseHits*150;
+    txt(this.caught>=5?'🏆 SHIFT COMPLETE!':'⏰ SHIFT OVER',W/2,140,34,'#3a2a18','center',800);
+    txt('The RFID gate never blinks — every unbilled tag gets flagged.',W/2,178,15,'#8a6f4d','center',400);
+    const rows=[
+      ['🚨 Thieves caught', this.caught+'  (+'+(this.caught*100)+')'],
+      ['🏃 Escaped', this.escaped+'  (−'+(this.escaped*50)+')'],
+      ['😇 Wrong accusations', this.falseHits+'  (−'+(this.falseHits*150)+')'],
+      ['⭐ FINAL SCORE', this.score],
+    ];
+    rows.forEach((r,i)=>{
+      txt(r[0],W/2-200,232+i*38,18,'#5b4a33','left',600);
+      txt(r[1],W/2+200,232+i*38,18,i===3?'#b26a00':'#3a2a18','right',800);
+    });
+    txt('💡 Real RFID gates do exactly this: scan every tag at the exit,',W/2,392,14,'#8a6f4d','center',400);
+    txt('match it against billed stock, and raise the alarm instantly.',W/2,412,14,'#8a6f4d','center',400);
+    for(const b of overBtns){
+      ctx.fillStyle='#e08a1e'; rr(b.x,b.y,b.w,b.h,26); ctx.fill();
+      txt(b.label,b.x+b.w/2,b.y+b.h/2+1,18,'#fff','center',800);
+    }
+  }
+};
+/* ============================================================
+   GAME 2 — TALLY RUSH (RFID stock tally)
+   Walk the showroom with the RFID reader. Everything inside the
+   blue ring scans at once — find every tag before closing time!
+   A couple of pieces are missing from stock (uh oh).
+   ============================================================ */
+const G2 = {
+  t:0, dur:75, found:0, total:24,
+  px:480, py:530, speed:300, radius:100,
+  tags:[], cases:[], floats:[],
+  keys:{}, drag:null, over:false, lastTickSec:-1,
+
+  reset(){
+    this.t=0; this.found=0; this.px=480; this.py=530;
+    this.tags=[]; this.cases=[]; this.floats=[];
+    this.keys={}; this.drag=null; this.over=false; this.lastTickSec=-1;
+    // 12 cases in a 4x3 grid; 2 items each
+    const cw=168, chh=104, gx0=92, gy0=110, dx=200, dy=140;
+    let n=0;
+    for(let r=0;r<3;r++) for(let c=0;c<4;c++){
+      const cx=gx0+c*dx, cy=gy0+r*dy;
+      this.cases.push({x:cx,y:cy,w:cw,h:chh});
+      for(let k=0;k<2;k++){
+        n++;
+        this.tags.push({
+          x:cx+52+k*64+rnd(-6,6), y:cy+chh/2+rnd(-8,8),
+          code:'RJ-'+(1000+n), scanned:false, missing:false, seed:Math.random()*10
+        });
+      }
+    }
+    // 2 pieces missing from stock
+    const idx=[...this.tags.keys()];
+    for(let i=0;i<2;i++){
+      const j=(Math.random()*idx.length)|0;
+      this.tags[idx.splice(j,1)[0]].missing=true;
+    }
+  },
+
+  pointer(x,y,isDown){
+    if(isDown) this.drag={x,y};
+    else if(this.drag) this.drag={x,y};
+  },
+
+  update(dt){
+    this.t+=dt;
+    const remain=this.dur-this.t;
+    const sec=Math.ceil(remain);
+    if(remain<=10&&remain>0&&sec!==this.lastTickSec){ this.lastTickSec=sec; sfx.tick(); }
+    if(remain<=0){ this.finish(); return; }
+
+    // movement: keys
+    let mx=0,my=0;
+    const K=this.keys;
+    if(K['arrowleft']||K['a']) mx-=1;
+    if(K['arrowright']||K['d']) mx+=1;
+    if(K['arrowup']||K['w']) my-=1;
+    if(K['arrowdown']||K['s']) my+=1;
+    if(mx||my){
+      const l=Math.hypot(mx,my);
+      this.px+=mx/l*this.speed*dt; this.py+=my/l*this.speed*dt;
+      this.drag=null;
+    }else if(this.drag){
+      const d=dist(this.px,this.py,this.drag.x,this.drag.y);
+      if(d>6){
+        const step=Math.min(d,this.speed*dt);
+        this.px+=(this.drag.x-this.px)/d*step;
+        this.py+=(this.drag.y-this.py)/d*step;
+      }
+    }
+    this.px=clamp(this.px,40,W-40); this.py=clamp(this.py,86,H-30);
+
+    // bulk scan everything in radius
+    for(const tg of this.tags){
+      if(tg.scanned||tg.missing) continue;
+      if(dist(this.px,this.py,tg.x,tg.y)<=this.radius){
+        tg.scanned=true; this.found++;
+        sfx.scan();
+        this.floats.push({x:tg.x,y:tg.y-16,txt:'+1',color:'#1a9e4b',t:0});
+        if(this.found===this.total-2){ // all present items scanned
+          this.floats.push({x:this.px,y:this.py-60,txt:'All visible tags scanned!',color:'#b26a00',t:0,big:true});
+        }
+      }
+    }
+    for(const f of this.floats) f.t+=dt;
+    this.floats=this.floats.filter(f=>f.t<1.1);
+  },
+
+  finish(){
+    if(this.over) return;
+    this.over=true; state='g2over';
+    const missing=this.tags.filter(t=>t.missing);
+    const unscanned=this.tags.filter(t=>!t.missing&&!t.scanned).length;
+    const timeLeft=Math.max(0,this.dur-this.t);
+    const score=Math.round(this.found*10 + timeLeft*4 - unscanned*15);
+    this.report={missing:missing.map(m=>m.code), unscanned, timeLeft, score};
+    if(this.found>=this.total-2) sfx.win(); else sfx.bad();
+    overBtns=[
+      {x:W/2-220,y:486,w:200,h:52,fn:()=>startGame('g2'),label:'↻ Play again'},
+      {x:W/2+20, y:486,w:200,h:52,fn:showMenu,label:'← Menu'}
+    ];
+  },
+
+  draw(){
+    // floor plan
+    let g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#fdf3df'); g.addColorStop(1,'#f3dfb8');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // top HUD strip
+    ctx.fillStyle='rgba(58,42,24,.88)'; ctx.fillRect(0,0,W,52);
+    const remain=Math.max(0,this.dur-this.t);
+    const mm=(remain/60)|0, ss=('0'+((remain|0)%60)).slice(-2);
+    txt('📡 Found '+this.found+'/'+this.total,20,27,20,'#ffd76a','left',800);
+    txt('⏱ '+mm+':'+ss,W/2,27,20,remain<15?'#ff8a8a':'#fff','center',800);
+    txt('2 pieces may be missing…',W-20,27,15,'#e8d5b5','right',600);
+
+    // cases
+    for(const c of this.cases){
+      ctx.fillStyle='#c99a5b'; rr(c.x,c.y,c.w,c.h,10); ctx.fill();
+      ctx.fillStyle='rgba(190,225,255,.5)'; rr(c.x+8,c.y+8,c.w-16,c.h-16,8); ctx.fill();
+      ctx.strokeStyle='rgba(120,80,30,.35)'; ctx.lineWidth=2; rr(c.x+8,c.y+8,c.w-16,c.h-16,8); ctx.stroke();
+    }
+    // tags
+    for(const tg of this.tags){
+      if(tg.missing) continue;
+      const pulse=tg.scanned?0:(0.5+0.5*Math.sin(this.t*4+tg.seed));
+      if(tg.scanned){
+        ctx.fillStyle='#2fb457'; circle(tg.x,tg.y,10); ctx.fill();
+        ctx.fillStyle='#fff'; circle(tg.x,tg.y,4); ctx.fill();
+      }else{
+        ctx.fillStyle='rgba(245,185,66,'+(0.55+0.35*pulse)+')';
+        ctx.save(); ctx.translate(tg.x,tg.y); ctx.rotate(Math.PI/4);
+        const s=11+3*pulse; ctx.fillRect(-s/2,-s/2,s,s); ctx.restore();
+        ctx.fillStyle='#7a4d12'; circle(tg.x,tg.y,2.5); ctx.fill();
+      }
+    }
+    // scan radius
+    ctx.globalAlpha=0.16; ctx.fillStyle='#4d7cff';
+    circle(this.px,this.py,this.radius); ctx.fill();
+    ctx.globalAlpha=0.55; ctx.strokeStyle='#4d7cff'; ctx.lineWidth=2.5;
+    ctx.setLineDash([10,8]); ctx.lineDashOffset=-this.t*30;
+    circle(this.px,this.py,this.radius); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+    // player (staff with reader)
+    ctx.fillStyle='rgba(60,35,10,.18)'; ell(this.px,this.py+4,16,6); ctx.fill();
+    const bob=Math.sin(this.t*10)*1.5;
+    ctx.fillStyle='#2ec4b6'; rr(this.px-13,this.py-46+bob,26,38,10); ctx.fill();
+    ctx.fillStyle='#f6cf9f'; circle(this.px,this.py-54+bob,12); ctx.fill();
+    ctx.fillStyle='#3a2a18';
+    ctx.beginPath(); ctx.arc(this.px,this.py-57+bob,12,Math.PI,Math.PI*2); ctx.fill();
+    // handheld reader
+    ctx.fillStyle='#33415c'; rr(this.px+12,this.py-34+bob,20,12,4); ctx.fill();
+    ctx.fillStyle='#7dff9a'; circle(this.px+28,this.py-28+bob,3); ctx.fill();
+    txt('YOU',this.px,this.py+22,12,'#5b4a33','center',800);
+
+    // floaters
+    for(const f of this.floats){
+      ctx.globalAlpha=1-f.t/1.1;
+      txt(f.txt,f.x,f.y-30*f.t,f.big?20:16,f.color,'center',800);
+    }
+    ctx.globalAlpha=1;
+    if(remain<15) txt('⏰ Hurry! Hit "Finish Tally" when done.',W/2,72,16,'#b35400','center',700);
+  },
+
+  drawOver(){
+    ctx.fillStyle='rgba(40,24,8,.72)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fffdf6'; rr(W/2-270,60,540,470,22); ctx.fill();
+    ctx.strokeStyle='#e8c877'; ctx.lineWidth=3; rr(W/2-270,60,540,470,22); ctx.stroke();
+    const r=this.report, perfect=r.unscanned===0;
+    txt(perfect?'📋 TALLY COMPLETE!':'📋 TALLY REPORT',W/2,108,32,'#3a2a18','center',800);
+    txt('Expected '+this.total+' pieces in software stock.',W/2,144,15,'#8a6f4d','center',400);
+    const rows=[
+      ['✅ Found by scan', this.found+' / '+this.total],
+      ['❓ Missing pieces', r.missing.join(', ')],
+      ['🔍 Left unscanned', r.unscanned],
+      ['⏱ Time left', r.timeLeft.toFixed(0)+'s'],
+      ['⭐ SCORE', r.score],
+    ];
+    rows.forEach((row,i)=>{
+      txt(row[0],W/2-220,196+i*36,17,'#5b4a33','left',600);
+      txt(String(row[1]),W/2+220,196+i*36,17,i===4?'#b26a00':'#3a2a18','right',800);
+    });
+    txt(perfect?'💡 Exactly like real RFID tally: bulk-scan the showroom,':'💡 Tip: one slow walk past every case scans',
+        W/2,392,14,'#8a6f4d','center',400);
+    txt(perfect?'and the missing pieces reveal themselves by code.':'everything nearby — no piece-by-piece scanning.',
+        W/2,412,14,'#8a6f4d','center',400);
+    txt('Missing: '+r.missing.join('  ·  '),W/2,444,15,'#d33','center',700);
+    for(const b of overBtns){
+      ctx.fillStyle='#e08a1e'; rr(b.x,b.y,b.w,b.h,26); ctx.fill();
+      txt(b.label,b.x+b.w/2,b.y+b.h/2+1,18,'#fff','center',800);
+    }
+  }
+};
+window.addEventListener('keydown', e=>{
+  const k=e.key.toLowerCase();
+  if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+  G2.keys[k]=true;
+});
+window.addEventListener('keyup', e=>{ G2.keys[e.key.toLowerCase()]=false; });
+
+/* ---------------- menu attract screen ---------------- */
+function drawMenu(){
+  let g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#fff4e0'); g.addColorStop(0.6,'#ffedcf'); g.addColorStop(0.61,'#e9c98f'); g.addColorStop(1,'#d9b274');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  txt('✨ OMUNIM JEWELLERY ✨',W/2,150,40,'#a06a1c','center',800);
+  // mini counters
+  for(let i=0;i<3;i++){
+    const cx=230+i*250;
+    ctx.fillStyle='#b07a3e'; rr(cx-90,330,180,90,10); ctx.fill();
+    ctx.fillStyle='rgba(190,225,255,.55)'; rr(cx-90,312,180,32,10); ctx.fill();
+    for(let j=0;j<4;j++){
+      ctx.fillStyle='rgba(255,215,90,.9)';
+      ctx.save(); ctx.translate(cx-60+j*40,328); ctx.rotate(Math.PI/4);
+      ctx.fillRect(-6,-6,12,12); ctx.restore();
+    }
+  }
+  // mini gate
+  for(const px of [800,844]){
+    const gg=ctx.createLinearGradient(px-14,0,px+14,0);
+    gg.addColorStop(0,'#c9973f'); gg.addColorStop(0.5,'#f6d47c'); gg.addColorStop(1,'#c9973f');
+    ctx.fillStyle=gg; rr(px-15,240,30,180,10); ctx.fill();
+  }
+  txt('RFID GATE',822,228,15,'#7a5c33','center',800);
+  txt('Pick a game above to play 👆',W/2,500,24,'#7a5c33','center',700);
+  txt('Catch thieves at the gate · Scan the whole showroom in seconds',W/2,534,16,'#a08660','center',400);
+}
+
+/* ---------------- main loop ---------------- */
+let lastTs=0;
+function loop(ts){
+  const dt=Math.min(0.05,(ts-lastTs)/1000||0.016); lastTs=ts;
+  ctx.clearRect(0,0,W,H);
+  overBtns = (state==='g1over'||state==='g2over') ? overBtns : [];
+  if(state==='menu'){ drawMenu(); }
+  else if(state==='g1'){ G1.update(dt); G1.draw(); }
+  else if(state==='g1over'){ G1.draw(); G1.drawOver(); }
+  else if(state==='g2'){ G2.update(dt); G2.draw(); }
+  else if(state==='g2over'){ G2.draw(); G2.drawOver(); }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
