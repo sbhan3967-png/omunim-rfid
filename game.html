@@ -47,7 +47,7 @@
   <div class="card">
     <div class="emoji">📡</div>
     <h2>Tally Rush</h2>
-    <p>Closing time! Walk the showroom with your <b>RFID reader</b> and scan every tag before the clock runs out. One wave reads everything nearby — no piece-by-piece scanning.</p>
+    <p>Closing time! First tally the old way — <b>barcode</b>, walking to each tag one by one. Then feel the difference with <b>RFID</b>: stand still while one wave reads every tag at once.</p>
     <button class="btn-gold" data-play="g2">▶ Play Tally Game</button>
   </div>
 </div>
@@ -158,8 +158,12 @@ function startGame(g){
   btnFinish.style.display = (g==='g2') ? '' : 'none';
   if(g==='g1'){ G1.reset(); state='g1';
     hintEl.innerHTML = '⚠️ When the gate flashes <b style="color:#d33">red</b>, tap the thief fast! Green flash = honest shopper, leave them alone.';
-  }else{ G2.reset(); state='g2';
-    hintEl.innerHTML = 'Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrow keys, or <b>drag</b> on the floor. The blue ring is your reader — everything inside it scans at once.';
+  }else{ G2.reset(); state='g2menu';
+    hintEl.innerHTML = 'Same showroom, same 24 tags — pick your scanner and feel the difference.';
+    overBtns=[
+      {x:W/2-340,y:290,w:310,h:150,fn:()=>G2.setMode('barcode'),label:'barcode'},
+      {x:W/2+30, y:290,w:310,h:150,fn:()=>G2.setMode('rfid'),label:'rfid'},
+    ];
   }
 }
 document.querySelectorAll('[data-play]').forEach(b=>{
@@ -187,7 +191,7 @@ cv.addEventListener('pointerdown', e=>{
   const p = toGame(e);
   if(state==='g1') G1.tap(p.x,p.y);
   else if(state==='g2') G2.pointer(p.x,p.y,true);
-  else if(state==='g1over'||state==='g2over'){
+  else if(state==='g1over'||state==='g2over'||state==='g2menu'){
     for(const b of overBtns){
       if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h){ b.fn(); break; }
     }
@@ -503,6 +507,7 @@ const G2 = {
     this.t=0; this.found=0; this.px=480; this.py=530;
     this.tags=[]; this.cases=[]; this.floats=[];
     this.keys={}; this.drag=null; this.over=false; this.lastTickSec=-1;
+    this.mode=null; this.radius=100;
     // 12 cases in a 4x3 grid; 2 items each
     const cw=168, chh=104, gx0=92, gy0=110, dx=200, dy=140;
     let n=0;
@@ -513,7 +518,7 @@ const G2 = {
         n++;
         this.tags.push({
           x:cx+52+k*64+rnd(-6,6), y:cy+chh/2+rnd(-8,8),
-          code:'RJ-'+(1000+n), scanned:false, missing:false, seed:Math.random()*10
+          code:'RJ-'+(1000+n), scanned:false, missing:false, dwell:0, seed:Math.random()*10
         });
       }
     }
@@ -523,6 +528,19 @@ const G2 = {
       const j=(Math.random()*idx.length)|0;
       this.tags[idx.splice(j,1)[0]].missing=true;
     }
+  },
+
+  setMode(m){
+    this.mode=m;
+    if(m==='barcode'){ this.radius=30; this.dur=90; }
+    else { this.radius=430; this.dur=40; }
+    this.t=0; this.lastTickSec=-1;
+    state='g2';
+    btnFinish.style.display='';
+    hintEl.innerHTML = m==='barcode'
+      ? '🔴 <b>Barcode mode:</b> walk right up to <b>each</b> tag and hold still a moment — one by one, like the old way. Move with <kbd>WASD</kbd>/arrows or drag.'
+      : '📡 <b>RFID mode:</b> just stand anywhere near the middle — one wave reads <b>every tag at once</b>. No walking needed!';
+    unlockAudio(); setTimeout(()=>beep(660,0.10,'triangle',0.14),60);
   },
 
   pointer(x,y,isDown){
@@ -558,14 +576,24 @@ const G2 = {
     }
     this.px=clamp(this.px,40,W-40); this.py=clamp(this.py,86,H-30);
 
-    // bulk scan everything in radius
+    // ---- scanning: barcode = one by one (tiny ring + dwell), RFID = bulk ----
     for(const tg of this.tags){
       if(tg.scanned||tg.missing) continue;
-      if(dist(this.px,this.py,tg.x,tg.y)<=this.radius){
+      const inR = dist(this.px,this.py,tg.x,tg.y)<=this.radius;
+      if(this.mode==='barcode'){
+        if(inR){
+          tg.dwell+=dt;
+          if(tg.dwell>=0.35 && !tg.scanned){
+            tg.scanned=true; this.found++;
+            sfx.scan();
+            this.floats.push({x:tg.x,y:tg.y-16,txt:'+1',color:'#1a9e4b',t:0});
+          }
+        } else tg.dwell=0;
+      }else if(inR){
         tg.scanned=true; this.found++;
         sfx.scan();
         this.floats.push({x:tg.x,y:tg.y-16,txt:'+1',color:'#1a9e4b',t:0});
-        if(this.found===this.total-2){ // all present items scanned
+        if(this.found===this.total-2){
           this.floats.push({x:this.px,y:this.py-60,txt:'All visible tags scanned!',color:'#b26a00',t:0,big:true});
         }
       }
@@ -589,6 +617,37 @@ const G2 = {
     ];
   },
 
+  drawModeSelect(){
+    let g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#fff4e0'); g.addColorStop(1,'#f3dfb8');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    txt('📋 Closing time — tally the showroom',W/2,120,32,'#3a2a18','center',800);
+    txt('Same 24 tags in software stock (2 may be missing). Pick your scanner:',W/2,162,17,'#8a6f4d','center',400);
+    const cards=[
+      {x:W/2-340, emoji:'🔴', title:'BARCODE', sub:'Scan one by one',
+       desc:'Walk to every single tag and hold still to scan it. The old way.', c2:'#e63946'},
+      {x:W/2+30, emoji:'📡', title:'RFID', sub:'Scan all at once',
+       desc:'Just stand still — one radio wave reads every tag together.', c2:'#2f6df6'},
+    ];
+    for(const cd of cards){
+      const gg=ctx.createLinearGradient(0,290,0,440);
+      gg.addColorStop(0,'#fffdf8'); gg.addColorStop(1,'#fdf0d8');
+      ctx.fillStyle=gg; rr(cd.x,290,310,150,18); ctx.fill();
+      ctx.lineWidth=3; ctx.strokeStyle=cd.c2; rr(cd.x,290,310,150,18); ctx.stroke();
+      ctx.fillStyle=cd.c2; rr(cd.x,290,310,10,5); ctx.fill(); ctx.fillRect(cd.x,295,310,5);
+      txt(cd.emoji,cd.x+155,334,40,'#3a2a18','center',400);
+      txt(cd.title,cd.x+155,370,24,cd.c2,'center',800);
+      txt(cd.sub,cd.x+155,393,15,'#5b4a33','center',700);
+      const words=cd.desc.split(' '); const lines=['']; let li=0;
+      for(const w of words){
+        if((lines[li]+' '+w).trim().length>30){ li++; lines[li]=''; }
+        lines[li]=(lines[li]+' '+w).trim();
+      }
+      lines.slice(0,2).forEach((ln,i)=>txt(ln,cd.x+155,415+i*18,13.5,'#8a6f4d','center',400));
+    }
+    txt('👆 Tap a scanner to start',W/2,486,20,'#7a5c33','center',700);
+  },
+
   draw(){
     // floor plan
     let g=ctx.createLinearGradient(0,0,0,H);
@@ -600,7 +659,7 @@ const G2 = {
     const mm=(remain/60)|0, ss=('0'+((remain|0)%60)).slice(-2);
     txt('📡 Found '+this.found+'/'+this.total,20,27,20,'#ffd76a','left',800);
     txt('⏱ '+mm+':'+ss,W/2,27,20,remain<15?'#ff8a8a':'#fff','center',800);
-    txt('2 pieces may be missing…',W-20,27,15,'#e8d5b5','right',600);
+    txt(this.mode==='barcode'?'🔴 BARCODE — one by one':'📡 RFID — all at once',W-20,27,15,'#e8d5b5','right',700);
 
     // cases
     for(const c of this.cases){
@@ -620,12 +679,19 @@ const G2 = {
         ctx.save(); ctx.translate(tg.x,tg.y); ctx.rotate(Math.PI/4);
         const s=11+3*pulse; ctx.fillRect(-s/2,-s/2,s,s); ctx.restore();
         ctx.fillStyle='#7a4d12'; circle(tg.x,tg.y,2.5); ctx.fill();
+        // barcode dwell progress ring
+        if(this.mode==='barcode' && tg.dwell>0){
+          ctx.strokeStyle='#ff5a5a'; ctx.lineWidth=3;
+          ctx.beginPath(); ctx.arc(tg.x,tg.y,15,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,tg.dwell/0.35));
+          ctx.stroke();
+        }
       }
     }
-    // scan radius
-    ctx.globalAlpha=0.16; ctx.fillStyle='#4d7cff';
+    // scan radius (red laser-ish for barcode, blue wave for RFID)
+    const ringC = this.mode==='barcode' ? '#ff5a5a' : '#4d7cff';
+    ctx.globalAlpha=0.16; ctx.fillStyle=ringC;
     circle(this.px,this.py,this.radius); ctx.fill();
-    ctx.globalAlpha=0.55; ctx.strokeStyle='#4d7cff'; ctx.lineWidth=2.5;
+    ctx.globalAlpha=0.55; ctx.strokeStyle=ringC; ctx.lineWidth=2.5;
     ctx.setLineDash([10,8]); ctx.lineDashOffset=-this.t*30;
     circle(this.px,this.py,this.radius); ctx.stroke();
     ctx.setLineDash([]); ctx.globalAlpha=1;
@@ -655,8 +721,9 @@ const G2 = {
     ctx.fillStyle='#fffdf6'; rr(W/2-270,60,540,470,22); ctx.fill();
     ctx.strokeStyle='#e8c877'; ctx.lineWidth=3; rr(W/2-270,60,540,470,22); ctx.stroke();
     const r=this.report, perfect=r.unscanned===0;
+    const modeName = this.mode==='barcode' ? '🔴 BARCODE' : '📡 RFID';
     txt(perfect?'📋 TALLY COMPLETE!':'📋 TALLY REPORT',W/2,108,32,'#3a2a18','center',800);
-    txt('Expected '+this.total+' pieces in software stock.',W/2,144,15,'#8a6f4d','center',400);
+    txt(modeName+' mode · Expected '+this.total+' pieces in software stock.',W/2,144,15,'#8a6f4d','center',400);
     const rows=[
       ['✅ Found by scan', this.found+' / '+this.total],
       ['❓ Missing pieces', r.missing.join(', ')],
@@ -668,9 +735,13 @@ const G2 = {
       txt(row[0],W/2-220,196+i*36,17,'#5b4a33','left',600);
       txt(String(row[1]),W/2+220,196+i*36,17,i===4?'#b26a00':'#3a2a18','right',800);
     });
-    txt(perfect?'💡 Exactly like real RFID tally: bulk-scan the showroom,':'💡 Tip: one slow walk past every case scans',
+    txt(this.mode==='barcode'
+        ? '💡 That was the old way — now try RFID mode and'
+        : '💡 Exactly like real RFID tally: one wave reads the',
         W/2,392,14,'#8a6f4d','center',400);
-    txt(perfect?'and the missing pieces reveal themselves by code.':'everything nearby — no piece-by-piece scanning.',
+    txt(this.mode==='barcode'
+        ? 'stand still while every tag scans at once.'
+        : 'whole showroom — missing pieces reveal themselves.',
         W/2,412,14,'#8a6f4d','center',400);
     txt('Missing: '+r.missing.join('  ·  '),W/2,444,15,'#d33','center',700);
     for(const b of overBtns){
@@ -719,11 +790,12 @@ let lastTs=0;
 function loop(ts){
   const dt=Math.min(0.05,(ts-lastTs)/1000||0.016); lastTs=ts;
   ctx.clearRect(0,0,W,H);
-  overBtns = (state==='g1over'||state==='g2over') ? overBtns : [];
+  overBtns = (state==='g1over'||state==='g2over'||state==='g2menu') ? overBtns : [];
   if(state==='menu'){ drawMenu(); }
   else if(state==='g1'){ G1.update(dt); G1.draw(); }
   else if(state==='g1over'){ G1.draw(); G1.drawOver(); }
   else if(state==='g2'){ G2.update(dt); G2.draw(); }
+  else if(state==='g2menu'){ G2.drawModeSelect(); }
   else if(state==='g2over'){ G2.draw(); G2.drawOver(); }
   requestAnimationFrame(loop);
 }
