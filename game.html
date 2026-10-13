@@ -98,7 +98,7 @@ function beep(freq, dur, type, vol, when){
     o.type = type; o.frequency.value = freq;
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(c.destination);
+    o.connect(g); g.connect(AC.destination);
     o.start(t); o.stop(t + dur + 0.03);
   }catch(e){}
 }
