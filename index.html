@@ -61,7 +61,8 @@
   .logo-stage.logo-top{width:min(290px,60vw);margin:0 auto 4px}
   .hero-center .hero-hint{margin:2px 0 16px}
   .hero-center h1{font-size:clamp(26px,3.8vw,42px);margin-bottom:12px}
-  .complete-line{font-size:clamp(30px,5vw,58px);font-weight:800;letter-spacing:-.02em;margin:0 0 18px}
+  .complete-line{font-size:clamp(30px,5vw,58px);font-weight:800;letter-spacing:-.02em;margin:0 0 10px}
+  .complete-sub{font-size:clamp(17px,2.6vw,26px);font-weight:700;color:var(--muted);margin:0 0 18px;letter-spacing:-.01em}
   .hero-center .lead{margin-left:auto;margin-right:auto;max-width:740px}
   .hero-center .hero-ctas{justify-content:center}
 
@@ -161,7 +162,8 @@
       <div class="eye-layer" id="eyeBlue"><img src="assets/eye-blue.png" alt="" draggable="false"></div>
       <div class="eye-layer" id="eyeGreen"><img src="assets/eye-green.png" alt="" draggable="false"></div>
     </div>
-    <p class="complete-line">Complete RFID <span class="typed-wrap"><span id="typed" class="typed-grad"></span><span class="caret" aria-hidden="true"></span></span></p>
+    <p class="complete-line">Complete RFID solution<br><span class="typed-wrap"><span id="typed" class="typed-grad"></span><span class="caret" aria-hidden="true"></span></span></p>
+    <p class="complete-sub">for jewellery showroom</p>
     <p class="lead">Omunim RFID reads <b style="color:var(--text)">multiple jewellery items together</b> — no one-by-one scanning. Verify your entire showroom against software stock, catch missing pieces instantly, and guard your exit with an RFID security gate.</p>
     <div class="hero-ctas">
       <a href="#simulator" class="btn btn-primary">Try the live simulator</a>
@@ -713,7 +715,7 @@
   'use strict';
   var el = document.getElementById('typed');
   if (!el) return;
-  var phrases = ['Stock Tally', 'Showroom Security', 'Jewellery ERP', 'Mobile App'];
+  var phrases = ['Showroom Security', 'Stock Tally', 'Jewellery ERP'];
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduceMotion) { el.textContent = phrases[0]; return; }
   var TYPE_MS = 75, DELETE_MS = 38, HOLD_MS = 1700, GAP_MS = 420;
