@@ -73,6 +73,18 @@ const W = 960, H = 600;
 
 /* ---------------- audio (WebAudio, no files) ---------------- */
 let muted = false, AC = null;
+function unlockAudio(){
+  // Must run inside a real user gesture (tap/click/key) or mobile browsers
+  // keep the AudioContext suspended forever -> no sound.
+  try{
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if(!Ctor) return;
+    AC = AC || new Ctor();
+    if(AC.state === 'suspended') AC.resume();
+  }catch(e){}
+}
+['pointerdown','touchend','keydown'].forEach(ev=>
+  document.addEventListener(ev, unlockAudio, {passive:true}));
 function beep(freq, dur, type, vol, when){
   if(muted) return;
   try{
@@ -139,6 +151,8 @@ function showMenu(){
   hintEl.innerHTML = '';
 }
 function startGame(g){
+  unlockAudio(); // user tapped Play -> safe moment to start the sound engine
+  setTimeout(()=>beep(660,0.10,'triangle',0.14),60); // audible "sound is on" blip
   menuEl.style.display = 'none';
   barEl.style.display = 'flex';
   btnFinish.style.display = (g==='g2') ? '' : 'none';
